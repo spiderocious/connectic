@@ -1,7 +1,7 @@
 {
-  "name": "package-name",
-  "version": "1.1.1",
-  "description": "package-description",
+  "name": "connectic",
+  "version": "1.0.0",
+  "description": "Connectic is a javascript library for pub sub messaging, event handling, and data synchronization in real-time applications.",
   "main": "dist/index.js",
   "module": "dist/index.mjs",
   "types": "dist/index.d.ts",
@@ -42,12 +42,12 @@
   "license": "MIT",
   "repository": {
     "type": "git",
-    "url": "git+https://github.com/package-name.git"
+    "url": "git+https://github.com/connectic.git"
   },
   "bugs": {
-    "url": "https://github.com/package-name/issues"
+    "url": "https://github.com/connectic/issues"
   },
-  "homepage": "https://github.com/package-name#readme",
+  "homepage": "https://github.com/connectic#readme",
   "devDependencies": {
     "@commitlint/cli": "^19.8.1",
     "@commitlint/config-conventional": "^19.8.1",
