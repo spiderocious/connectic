@@ -1,21 +1,21 @@
 /**
  * connectic - Bus Registry Implementation
- * 
+ *
  * This file manages global bus instances to enable cross-application communication.
  * It handles storage in different environments (browser, Node.js, Web Workers).
  */
 
-import { BusErrorFactory, wrapError } from '../errors'
-import { BusConfig } from '../types'
-import { getGlobalStore, isValidEventName } from './utils'
+import { BusErrorFactory, wrapError } from '../errors';
+import { BusConfig } from '../types';
+import { getGlobalStore, isValidEventName } from './utils';
 
 /**
  * Interface that bus instances must implement to be managed by the registry
  */
 interface RegistrableBus {
-  destroy(): void
-  isDestroyedState(): boolean
-  getStats(): any
+  destroy(): void;
+  isDestroyedState(): boolean;
+  getStats(): any;
 }
 
 /**
@@ -23,9 +23,9 @@ interface RegistrableBus {
  * Enables cross-app communication by ensuring single instances are shared
  */
 export class BusRegistry {
-  private static instances = new Map<string, RegistrableBus>()
-  private static fallbackStore: Map<string, RegistrableBus> | null = null
-  private static isInitialized = false
+  private static instances = new Map<string, RegistrableBus>();
+  private static fallbackStore: Map<string, RegistrableBus> | null = null;
+  private static isInitialized = false;
 
   /**
    * Initializes the registry and sets up global storage
@@ -33,27 +33,29 @@ export class BusRegistry {
    */
   private static initialize(): void {
     if (this.isInitialized) {
-      return
+      return;
     }
 
     try {
       // Attempt to use global store for cross-app sharing
-      const globalStore = getGlobalStore()
-      
+      const globalStore = getGlobalStore();
+
       // Check if another instance of connectic already exists
       if (globalStore.has('CONNECTIC_INSTANCES')) {
-        this.instances = globalStore.get('CONNECTIC_INSTANCES')
+        this.instances = globalStore.get('CONNECTIC_INSTANCES');
       } else {
-        globalStore.set('CONNECTIC_INSTANCES', this.instances)
+        globalStore.set('CONNECTIC_INSTANCES', this.instances);
       }
-      
-      this.isInitialized = true
-      
+
+      this.isInitialized = true;
     } catch (error) {
       // Fall back to module-level storage if global storage fails
-      console.warn('Failed to initialize global bus registry, using fallback storage:', error)
-      this.fallbackStore = new Map()
-      this.isInitialized = true
+      console.warn(
+        'Failed to initialize global bus registry, using fallback storage:',
+        error
+      );
+      this.fallbackStore = new Map();
+      this.isInitialized = true;
     }
   }
 
@@ -62,8 +64,8 @@ export class BusRegistry {
    * @private
    */
   private static getStorage(): Map<string, RegistrableBus> {
-    this.initialize()
-    return this.fallbackStore || this.instances
+    this.initialize();
+    return this.fallbackStore || this.instances;
   }
 
   /**
@@ -82,36 +84,37 @@ export class BusRegistry {
           'registry.create',
           'Bus name must be a valid identifier',
           { name: config.name }
-        )
+        );
       }
 
-      const storage = this.getStorage()
-      
+      const storage = this.getStorage();
+
       // Check if bus already exists
       if (storage.has(config.name)) {
-        const existingBus = storage.get(config.name)!
-        
+        const existingBus = storage.get(config.name)!;
+
         // Verify existing bus is still valid
         if (!existingBus.isDestroyedState()) {
-          console.warn(`Bus with name "${config.name}" already exists. Returning existing instance.`)
-          return existingBus as T
+          console.warn(
+            `Bus with name "${config.name}" already exists. Returning existing instance.`
+          );
+          return existingBus as T;
         } else {
           // Clean up destroyed bus
-          storage.delete(config.name)
+          storage.delete(config.name);
         }
       }
 
       // Create new bus instance
-      const bus = new BusClass(config)
-      storage.set(config.name, bus)
-      
-      // Set up cleanup on bus destruction
-      this.setupBusCleanup(config.name, bus)
-      
-      return bus
+      const bus = new BusClass(config);
+      storage.set(config.name, bus);
 
+      // Set up cleanup on bus destruction
+      this.setupBusCleanup(config.name, bus);
+
+      return bus;
     } catch (error) {
-      throw wrapError(error, `registry.create:${config.name}`)
+      throw wrapError(error, `registry.create:${config.name}`);
     }
   }
 
@@ -127,26 +130,25 @@ export class BusRegistry {
           'registry.get',
           'Bus name must be a valid identifier',
           { name }
-        )
+        );
       }
 
-      const storage = this.getStorage()
-      const bus = storage.get(name)
-      
+      const storage = this.getStorage();
+      const bus = storage.get(name);
+
       if (!bus) {
-        return null
+        return null;
       }
 
       // Check if bus is still valid
       if (bus.isDestroyedState()) {
-        storage.delete(name)
-        return null
+        storage.delete(name);
+        return null;
       }
 
-      return bus as T
-
+      return bus as T;
     } catch (error) {
-      throw wrapError(error, `registry.get:${name}`)
+      throw wrapError(error, `registry.get:${name}`);
     }
   }
 
@@ -158,28 +160,27 @@ export class BusRegistry {
   static has(name: string): boolean {
     try {
       if (!isValidEventName(name)) {
-        return false
+        return false;
       }
 
-      const storage = this.getStorage()
-      const bus = storage.get(name)
-      
+      const storage = this.getStorage();
+      const bus = storage.get(name);
+
       if (!bus) {
-        return false
+        return false;
       }
 
       // Check if bus is still valid
       if (bus.isDestroyedState()) {
-        storage.delete(name)
-        return false
+        storage.delete(name);
+        return false;
       }
 
-      return true
-
+      return true;
     } catch (error) {
       // Return false instead of throwing for existence checks
-      console.warn(`Error checking bus existence for "${name}":`, error)
-      return false
+      console.warn(`Error checking bus existence for "${name}":`, error);
+      return false;
     }
   }
 
@@ -195,30 +196,29 @@ export class BusRegistry {
           'registry.remove',
           'Bus name must be a valid identifier',
           { name }
-        )
+        );
       }
 
-      const storage = this.getStorage()
-      const bus = storage.get(name)
-      
+      const storage = this.getStorage();
+      const bus = storage.get(name);
+
       if (!bus) {
-        return false
+        return false;
       }
 
       // Destroy the bus if it's not already destroyed
       try {
         if (!bus.isDestroyedState()) {
-          bus.destroy()
+          bus.destroy();
         }
       } catch (error) {
-        console.warn(`Error destroying bus "${name}":`, error)
+        console.warn(`Error destroying bus "${name}":`, error);
       }
 
       // Remove from storage
-      return storage.delete(name)
-
+      return storage.delete(name);
     } catch (error) {
-      throw wrapError(error, `registry.remove:${name}`)
+      throw wrapError(error, `registry.remove:${name}`);
     }
   }
 
@@ -227,24 +227,23 @@ export class BusRegistry {
    */
   static clear(): void {
     try {
-      const storage = this.getStorage()
-      
+      const storage = this.getStorage();
+
       // Destroy all buses
       storage.forEach((bus, name) => {
         try {
           if (!bus.isDestroyedState()) {
-            bus.destroy()
+            bus.destroy();
           }
         } catch (error) {
-          console.warn(`Error destroying bus "${name}" during clear:`, error)
+          console.warn(`Error destroying bus "${name}" during clear:`, error);
         }
-      })
+      });
 
       // Clear storage
-      storage.clear()
-
+      storage.clear();
     } catch (error) {
-      throw wrapError(error, 'registry.clear')
+      throw wrapError(error, 'registry.clear');
     }
   }
 
@@ -254,23 +253,22 @@ export class BusRegistry {
    */
   static getAll(): string[] {
     try {
-      const storage = this.getStorage()
-      const names: string[] = []
-      
+      const storage = this.getStorage();
+      const names: string[] = [];
+
       // Filter out destroyed buses
       storage.forEach((bus, name) => {
         if (!bus.isDestroyedState()) {
-          names.push(name)
+          names.push(name);
         } else {
           // Clean up destroyed buses
-          storage.delete(name)
+          storage.delete(name);
         }
-      })
+      });
 
-      return names
-
+      return names;
     } catch (error) {
-      throw wrapError(error, 'registry.getAll')
+      throw wrapError(error, 'registry.getAll');
     }
   }
 
@@ -280,23 +278,24 @@ export class BusRegistry {
    */
   static getAllStats(): Record<string, any> {
     try {
-      const storage = this.getStorage()
-      const stats: Record<string, any> = {}
-      
+      const storage = this.getStorage();
+      const stats: Record<string, any> = {};
+
       storage.forEach((bus, name) => {
         if (!bus.isDestroyedState()) {
           try {
-            stats[name] = bus.getStats()
+            stats[name] = bus.getStats();
           } catch (error) {
-            stats[name] = { error: error instanceof Error ? error.message : String(error) }
+            stats[name] = {
+              error: error instanceof Error ? error.message : String(error),
+            };
           }
         }
-      })
+      });
 
-      return stats
-
+      return stats;
     } catch (error) {
-      throw wrapError(error, 'registry.getAllStats')
+      throw wrapError(error, 'registry.getAllStats');
     }
   }
 
@@ -306,17 +305,17 @@ export class BusRegistry {
    */
   static getRegistryInfo(): object {
     try {
-      const storage = this.getStorage()
-      let validBuses = 0
-      let destroyedBuses = 0
-      
-      storage.forEach((bus) => {
+      const storage = this.getStorage();
+      let validBuses = 0;
+      let destroyedBuses = 0;
+
+      storage.forEach(bus => {
         if (bus.isDestroyedState()) {
-          destroyedBuses++
+          destroyedBuses++;
         } else {
-          validBuses++
+          validBuses++;
         }
-      })
+      });
 
       return {
         totalBuses: storage.size,
@@ -324,15 +323,14 @@ export class BusRegistry {
         destroyedBuses,
         isInitialized: this.isInitialized,
         usingFallbackStorage: this.fallbackStore !== null,
-        storageType: this.fallbackStore ? 'fallback' : 'global'
-      }
-
+        storageType: this.fallbackStore ? 'fallback' : 'global',
+      };
     } catch (error) {
       return {
         error: error instanceof Error ? error.message : String(error),
         isInitialized: this.isInitialized,
-        usingFallbackStorage: this.fallbackStore !== null
-      }
+        usingFallbackStorage: this.fallbackStore !== null,
+      };
     }
   }
 
@@ -342,28 +340,27 @@ export class BusRegistry {
    */
   static cleanup(): void {
     try {
-      const storage = this.getStorage()
-      const toRemove: string[] = []
-      
+      const storage = this.getStorage();
+      const toRemove: string[] = [];
+
       // Identify destroyed buses
       storage.forEach((bus, name) => {
         if (bus.isDestroyedState()) {
-          toRemove.push(name)
+          toRemove.push(name);
         }
-      })
+      });
 
       // Remove destroyed buses
       toRemove.forEach(name => {
-        storage.delete(name)
-      })
+        storage.delete(name);
+      });
 
       // Force garbage collection hint (if available)
       if (typeof global !== 'undefined' && global.gc) {
-        global.gc()
+        global.gc();
       }
-
     } catch (error) {
-      console.warn('Registry cleanup failed:', error)
+      console.warn('Registry cleanup failed:', error);
     }
   }
 
@@ -373,18 +370,18 @@ export class BusRegistry {
    */
   private static setupBusCleanup(name: string, bus: RegistrableBus): void {
     // Store original destroy method
-    const originalDestroy = bus.destroy.bind(bus)
-    
+    const originalDestroy = bus.destroy.bind(bus);
+
     // Override destroy to include registry cleanup
     bus.destroy = () => {
       try {
-        originalDestroy()
+        originalDestroy();
       } finally {
         // Remove from registry after destruction
-        const storage = this.getStorage()
-        storage.delete(name)
+        const storage = this.getStorage();
+        storage.delete(name);
       }
-    }
+    };
   }
 
   /**
@@ -392,9 +389,9 @@ export class BusRegistry {
    * @private
    */
   static _reset(): void {
-    this.instances.clear()
-    this.fallbackStore = null
-    this.isInitialized = false
+    this.instances.clear();
+    this.fallbackStore = null;
+    this.isInitialized = false;
   }
 }
 
@@ -408,7 +405,7 @@ export function createBusInstance<T extends RegistrableBus>(
   config: BusConfig,
   BusClass: new (config: BusConfig) => T
 ): T {
-  return BusRegistry.create(config, BusClass)
+  return BusRegistry.create(config, BusClass);
 }
 
 /**
@@ -416,8 +413,10 @@ export function createBusInstance<T extends RegistrableBus>(
  * @param name Bus name
  * @returns Bus instance or null
  */
-export function getBusInstance<T extends RegistrableBus>(name: string): T | null {
-  return BusRegistry.get<T>(name)
+export function getBusInstance<T extends RegistrableBus>(
+  name: string
+): T | null {
+  return BusRegistry.get<T>(name);
 }
 
 /**
@@ -430,11 +429,11 @@ export function getOrCreateBusInstance<T extends RegistrableBus>(
   config: BusConfig,
   BusClass: new (config: BusConfig) => T
 ): T {
-  const existing = BusRegistry.get<T>(config.name)
+  const existing = BusRegistry.get<T>(config.name);
   if (existing) {
-    return existing
+    return existing;
   }
-  return BusRegistry.create(config, BusClass)
+  return BusRegistry.create(config, BusClass);
 }
 
 /**
@@ -443,14 +442,14 @@ export function getOrCreateBusInstance<T extends RegistrableBus>(
  * @returns True if removed
  */
 export function removeBusInstance(name: string): boolean {
-  return BusRegistry.remove(name)
+  return BusRegistry.remove(name);
 }
 
 /**
  * Convenience function for clearing all bus instances
  */
 export function clearAllBusInstances(): void {
-  BusRegistry.clear()
+  BusRegistry.clear();
 }
 
 /**
@@ -458,5 +457,5 @@ export function clearAllBusInstances(): void {
  * @returns Array of bus names
  */
 export function listBusInstances(): string[] {
-  return BusRegistry.getAll()
+  return BusRegistry.getAll();
 }

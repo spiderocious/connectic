@@ -1,6 +1,6 @@
 /**
  * connectic - Core Utilities
- * 
+ *
  * This file contains internal utility functions used throughout connectic.
  * These utilities handle ID generation, validation, debouncing, and memory management.
  */
@@ -13,12 +13,12 @@ import { BusErrorFactory, createValidationError } from '../errors';
  * @returns Unique string ID combining timestamp and random characters
  */
 export function generateId(length: number = 16): string {
-  const timestamp = Date.now().toString(36)
-  const randomPart = Array.from({ length }, () => 
+  const timestamp = Date.now().toString(36);
+  const randomPart = Array.from({ length }, () =>
     Math.random().toString(36).charAt(2)
-  ).join('')
-  
-  return `${timestamp}_${randomPart}`
+  ).join('');
+
+  return `${timestamp}_${randomPart}`;
 }
 
 /**
@@ -27,10 +27,12 @@ export function generateId(length: number = 16): string {
  * @returns True if valid, false otherwise
  */
 export function isValidEventName(name: any): name is string {
-  return typeof name === 'string' && 
-         name.length > 0 && 
-         name.length <= 255 && 
-         !/^\s|\s$/.test(name) // No leading/trailing whitespace
+  return (
+    typeof name === 'string' &&
+    name.length > 0 &&
+    name.length <= 255 &&
+    !/^\s|\s$/.test(name)
+  ); // No leading/trailing whitespace
 }
 
 /**
@@ -39,10 +41,12 @@ export function isValidEventName(name: any): name is string {
  * @returns True if valid timeout, false otherwise
  */
 export function isValidTimeout(timeout: any): timeout is number {
-  return typeof timeout === 'number' && 
-         timeout > 0 && 
-         timeout <= Number.MAX_SAFE_INTEGER &&
-         Number.isFinite(timeout)
+  return (
+    typeof timeout === 'number' &&
+    timeout > 0 &&
+    timeout <= Number.MAX_SAFE_INTEGER &&
+    Number.isFinite(timeout)
+  );
 }
 
 /**
@@ -51,10 +55,12 @@ export function isValidTimeout(timeout: any): timeout is number {
  * @returns True if valid retry count, false otherwise
  */
 export function isValidRetries(retries: any): retries is number {
-  return typeof retries === 'number' && 
-         retries >= 0 && 
-         retries <= 100 &&
-         Number.isInteger(retries)
+  return (
+    typeof retries === 'number' &&
+    retries >= 0 &&
+    retries <= 100 &&
+    Number.isInteger(retries)
+  );
 }
 
 /**
@@ -63,7 +69,7 @@ export function isValidRetries(retries: any): retries is number {
  * @returns True if valid handler, false otherwise
  */
 export function isValidHandler(handler: any): handler is Function {
-  return typeof handler === 'function'
+  return typeof handler === 'function';
 }
 
 /**
@@ -73,23 +79,23 @@ export function isValidHandler(handler: any): handler is Function {
  * @returns Debounced function
  */
 export function debounce<T extends (...args: any[]) => any>(
-  func: T, 
+  func: T,
   wait: number
 ): T {
-  let timeout: NodeJS.Timeout | undefined
+  let timeout: NodeJS.Timeout | undefined;
 
   const debounced = (...args: Parameters<T>) => {
-    clearTimeout(timeout)
-    timeout = setTimeout(() => func(...args), wait)
-  }
+    clearTimeout(timeout);
+    timeout = setTimeout(() => func(...args), wait);
+  };
 
   // Add cancel method to clear pending execution
-  ;(debounced as any).cancel = () => {
-    clearTimeout(timeout)
-    timeout = undefined
-  }
+  (debounced as any).cancel = () => {
+    clearTimeout(timeout);
+    timeout = undefined;
+  };
 
-  return debounced as T
+  return debounced as T;
 }
 
 /**
@@ -99,20 +105,20 @@ export function debounce<T extends (...args: any[]) => any>(
  * @returns Throttled function
  */
 export function throttle<T extends (...args: any[]) => any>(
-  func: T, 
+  func: T,
   limit: number
 ): T {
-  let inThrottle = false
+  let inThrottle = false;
 
   const throttled = (...args: Parameters<T>) => {
     if (!inThrottle) {
-      func(...args)
-      inThrottle = true
-      setTimeout(() => inThrottle = false, limit)
+      func(...args);
+      inThrottle = true;
+      setTimeout(() => (inThrottle = false), limit);
     }
-  }
+  };
 
-  return throttled as T
+  return throttled as T;
 }
 
 /**
@@ -123,13 +129,13 @@ export function throttle<T extends (...args: any[]) => any>(
  */
 export function deepClone<T>(obj: T): T {
   if (obj === null || typeof obj !== 'object') {
-    return obj
+    return obj;
   }
 
   // Use structuredClone if available (modern browsers)
   if (typeof structuredClone !== 'undefined') {
     try {
-      return structuredClone(obj)
+      return structuredClone(obj);
     } catch {
       // Fall through to JSON method
     }
@@ -137,13 +143,13 @@ export function deepClone<T>(obj: T): T {
 
   // Fallback to JSON clone (doesn't handle functions, undefined, symbols)
   try {
-    return JSON.parse(JSON.stringify(obj))
+    return JSON.parse(JSON.stringify(obj));
   } catch (error) {
     throw BusErrorFactory.internal(
       `Failed to clone object: ${error instanceof Error ? error.message : String(error)}`,
       error instanceof Error ? error : undefined,
       { originalObject: obj }
-    )
+    );
   }
 }
 
@@ -153,41 +159,41 @@ export function deepClone<T>(obj: T): T {
  * @returns Global storage Map instance
  */
 export function getGlobalStore(): Map<string, any> {
-  const REGISTRY_KEY = '__CONNECTIC_BUS_REGISTRY_v1__'
+  const REGISTRY_KEY = '__CONNECTIC_BUS_REGISTRY_v1__';
 
   // Try window first (browser main thread)
   if (typeof window !== 'undefined') {
     if (!(window as any)[REGISTRY_KEY]) {
-      (window as any)[REGISTRY_KEY] = new Map()
+      (window as any)[REGISTRY_KEY] = new Map();
     }
-    return (window as any)[REGISTRY_KEY]
+    return (window as any)[REGISTRY_KEY];
   }
 
   // Try global (Node.js, Web Workers)
   if (typeof global !== 'undefined') {
     if (!(global as any)[REGISTRY_KEY]) {
-      (global as any)[REGISTRY_KEY] = new Map()
+      (global as any)[REGISTRY_KEY] = new Map();
     }
-    return (global as any)[REGISTRY_KEY]
+    return (global as any)[REGISTRY_KEY];
   }
 
   // Try globalThis (universal)
   if (typeof globalThis !== 'undefined') {
     if (!(globalThis as any)[REGISTRY_KEY]) {
-      (globalThis as any)[REGISTRY_KEY] = new Map()
+      (globalThis as any)[REGISTRY_KEY] = new Map();
     }
-    return (globalThis as any)[REGISTRY_KEY]
+    return (globalThis as any)[REGISTRY_KEY];
   }
 
   // Last resort - module-level fallback
   if (!moduleStore) {
-    moduleStore = new Map()
+    moduleStore = new Map();
   }
-  return moduleStore
+  return moduleStore;
 }
 
 // Module-level fallback store
-let moduleStore: Map<string, any>
+let moduleStore: Map<string, any>;
 
 /**
  * Cleans up memory references to prevent memory leaks
@@ -195,32 +201,32 @@ let moduleStore: Map<string, any>
  */
 export function cleanupMemoryReferences(obj: any): void {
   if (!obj || typeof obj !== 'object') {
-    return
+    return;
   }
 
   // Clear arrays
   if (Array.isArray(obj)) {
-    obj.length = 0
-    return
+    obj.length = 0;
+    return;
   }
 
   // Clear Maps
   if (obj instanceof Map) {
-    obj.clear()
-    return
+    obj.clear();
+    return;
   }
 
   // Clear Sets
   if (obj instanceof Set) {
-    obj.clear()
-    return
+    obj.clear();
+    return;
   }
 
   // Clear object properties
   try {
     for (const key in obj) {
       if (obj.hasOwnProperty(key)) {
-        delete obj[key]
+        delete obj[key];
       }
     }
   } catch {
@@ -236,15 +242,15 @@ export function cleanupMemoryReferences(obj: any): void {
  * @returns Function result or fallback value
  */
 export function safeExecute<T>(
-  fn: () => T, 
-  context: string, 
+  fn: () => T,
+  context: string,
   fallbackValue?: T
 ): T | undefined {
   try {
-    return fn()
+    return fn();
   } catch (error) {
-    console.warn(`Error in ${context}:`, error)
-    return fallbackValue
+    console.warn(`Error in ${context}:`, error);
+    return fallbackValue;
   }
 }
 
@@ -256,15 +262,15 @@ export function safeExecute<T>(
  * @returns Promise resolving to function result or fallback value
  */
 export async function safeExecuteAsync<T>(
-  fn: () => Promise<T>, 
-  context: string, 
+  fn: () => Promise<T>,
+  context: string,
   fallbackValue?: T
 ): Promise<T | undefined> {
   try {
-    return await fn()
+    return await fn();
   } catch (error) {
-    console.warn(`Error in ${context}:`, error)
-    return fallbackValue
+    console.warn(`Error in ${context}:`, error);
+    return fallbackValue;
   }
 }
 
@@ -275,10 +281,10 @@ export async function safeExecuteAsync<T>(
  */
 export function isSerializable(payload: any): boolean {
   try {
-    JSON.stringify(payload)
-    return true
+    JSON.stringify(payload);
+    return true;
   } catch {
-    return false
+    return false;
   }
 }
 
@@ -289,49 +295,49 @@ export function isSerializable(payload: any): boolean {
  * @returns Estimated size in bytes
  */
 export function estimateObjectSize(obj: any): number {
-  const seen = new WeakSet()
-  
+  const seen = new WeakSet();
+
   function calculate(obj: any): number {
     if (obj === null || obj === undefined) {
-      return 0
+      return 0;
     }
 
     if (typeof obj === 'boolean') {
-      return 4
+      return 4;
     }
 
     if (typeof obj === 'number') {
-      return 8
+      return 8;
     }
 
     if (typeof obj === 'string') {
-      return obj.length * 2 // UTF-16
+      return obj.length * 2; // UTF-16
     }
 
     if (typeof obj === 'function') {
-      return obj.toString().length * 2
+      return obj.toString().length * 2;
     }
 
     if (seen.has(obj)) {
-      return 0 // Avoid circular references
+      return 0; // Avoid circular references
     }
 
-    seen.add(obj)
+    seen.add(obj);
 
     if (Array.isArray(obj)) {
-      return obj.reduce((size, item) => size + calculate(item), 0)
+      return obj.reduce((size, item) => size + calculate(item), 0);
     }
 
     if (typeof obj === 'object') {
       return Object.keys(obj).reduce((size, key) => {
-        return size + key.length * 2 + calculate(obj[key])
-      }, 0)
+        return size + key.length * 2 + calculate(obj[key]);
+      }, 0);
     }
 
-    return 0
+    return 0;
   }
 
-  return calculate(obj)
+  return calculate(obj);
 }
 
 /**
@@ -340,16 +346,16 @@ export function estimateObjectSize(obj: any): number {
  * @returns Numeric hash code
  */
 export function hashString(str: string): number {
-  let hash = 0
-  if (str.length === 0) return hash
-  
+  let hash = 0;
+  if (str.length === 0) return hash;
+
   for (let i = 0; i < str.length; i++) {
-    const char = str.charCodeAt(i)
-    hash = ((hash << 5) - hash) + char
-    hash = hash & hash // Convert to 32-bit integer
+    const char = str.charCodeAt(i);
+    hash = (hash << 5) - hash + char;
+    hash = hash & hash; // Convert to 32-bit integer
   }
-  
-  return Math.abs(hash)
+
+  return Math.abs(hash);
 }
 
 /**
@@ -360,16 +366,16 @@ export function hashString(str: string): number {
  */
 export function createCacheKey(event: string, payload?: any): string {
   if (!payload) {
-    return event
+    return event;
   }
 
   try {
-    const payloadStr = JSON.stringify(payload)
-    const hash = hashString(payloadStr)
-    return `${event}:${hash}`
+    const payloadStr = JSON.stringify(payload);
+    const hash = hashString(payloadStr);
+    return `${event}:${hash}`;
   } catch {
     // Fallback if payload isn't serializable
-    return `${event}:${Date.now()}`
+    return `${event}:${Date.now()}`;
   }
 }
 
@@ -387,19 +393,19 @@ export function validateParameters(
   retries?: any
 ): void {
   if (!isValidEventName(event)) {
-    throw createValidationError('event', event, 'non-empty string')
+    throw createValidationError('event', event, 'non-empty string');
   }
 
   if (handler !== undefined && !isValidHandler(handler)) {
-    throw createValidationError('handler', handler, 'function')
+    throw createValidationError('handler', handler, 'function');
   }
 
   if (timeout !== undefined && !isValidTimeout(timeout)) {
-    throw createValidationError('timeout', timeout, 'positive number')
+    throw createValidationError('timeout', timeout, 'positive number');
   }
 
   if (retries !== undefined && !isValidRetries(retries)) {
-    throw createValidationError('retries', retries, 'non-negative integer')
+    throw createValidationError('retries', retries, 'non-negative integer');
   }
 }
 
@@ -409,7 +415,7 @@ export function validateParameters(
  * @returns Promise that resolves after the delay
  */
 export function delay(ms: number): Promise<void> {
-  return new Promise(resolve => setTimeout(resolve, ms))
+  return new Promise(resolve => setTimeout(resolve, ms));
 }
 
 /**
@@ -420,12 +426,12 @@ export function delay(ms: number): Promise<void> {
  * @returns Calculated delay for this attempt
  */
 export function exponentialBackoff(
-  attempt: number, 
-  baseDelay: number = 1000, 
+  attempt: number,
+  baseDelay: number = 1000,
   maxDelay: number = 30000
 ): number {
-  const delay = baseDelay * Math.pow(2, attempt)
-  return Math.min(delay, maxDelay)
+  const delay = baseDelay * Math.pow(2, attempt);
+  return Math.min(delay, maxDelay);
 }
 
 /**
@@ -433,7 +439,9 @@ export function exponentialBackoff(
  * @returns True if in browser, false otherwise
  */
 export function isBrowser(): boolean {
-  return typeof window !== 'undefined' && typeof window.document !== 'undefined'
+  return (
+    typeof window !== 'undefined' && typeof window.document !== 'undefined'
+  );
 }
 
 /**
@@ -441,9 +449,11 @@ export function isBrowser(): boolean {
  * @returns True if in Node.js, false otherwise
  */
 export function isNode(): boolean {
-  return typeof process !== 'undefined' && 
-         process.versions != null && 
-         process.versions.node != null
+  return (
+    typeof process !== 'undefined' &&
+    process.versions != null &&
+    process.versions.node != null
+  );
 }
 
 /**
@@ -454,7 +464,9 @@ export function isNode(): boolean {
 declare const importScripts: Function | undefined;
 
 export function isWebWorker(): boolean {
-  return typeof importScripts === 'function' && 
-         typeof navigator !== 'undefined' && 
-         typeof (navigator as any).userAgent === 'string'
+  return (
+    typeof importScripts === 'function' &&
+    typeof navigator !== 'undefined' &&
+    typeof (navigator as any).userAgent === 'string'
+  );
 }

@@ -1,33 +1,33 @@
 /**
  * connectic - Core Event Bus Implementation
- * 
+ *
  * This file contains the foundational event bus that provides pub/sub functionality.
  * All other communication patterns are built on top of this core infrastructure.
  */
 
-import { BusErrorFactory, wrapError } from '../errors'
-import { BusStats } from '../types'
+import { BusErrorFactory, wrapError } from '../errors';
+import { BusStats } from '../types';
 import {
-    estimateObjectSize,
-    isValidEventName,
-    safeExecute,
-    validateParameters
-} from './utils'
+  estimateObjectSize,
+  isValidEventName,
+  safeExecute,
+  validateParameters,
+} from './utils';
 
 /**
  * Core event bus providing pub/sub functionality
  * This is the foundation that all other communication patterns build upon
  */
 export class EventBus {
-  private listeners = new Map<string, Set<Function>>()
+  private listeners = new Map<string, Set<Function>>();
   private stats = {
     totalEvents: 0,
     totalSubscriptions: 0,
     totalUnsubscriptions: 0,
-    errorCount: 0
-  }
-  private isDestroyed = false
-  private maxListeners = 100 // Per event limit to prevent memory leaks
+    errorCount: 0,
+  };
+  private isDestroyed = false;
+  private maxListeners = 100; // Per event limit to prevent memory leaks
 
   /**
    * Emits an event to all registered listeners
@@ -35,29 +35,25 @@ export class EventBus {
    * @param payload Data to send with the event
    */
   emit(event: string, payload: any): void {
-    this.throwIfDestroyed()
-    
+    this.throwIfDestroyed();
+
     try {
-      validateParameters(event)
-      
-      this.stats.totalEvents++
-      
-      const handlers = this.listeners.get(event)
+      validateParameters(event);
+
+      this.stats.totalEvents++;
+
+      const handlers = this.listeners.get(event);
       if (!handlers || handlers.size === 0) {
-        return // No listeners, silently return
+        return; // No listeners, silently return
       }
 
       // Execute handlers in isolation to prevent one error from affecting others
       handlers.forEach(handler => {
-        safeExecute(
-          () => handler(payload),
-          `event handler for '${event}'`
-        )
-      })
-
+        safeExecute(() => handler(payload), `event handler for '${event}'`);
+      });
     } catch (error) {
-      this.stats.errorCount++
-      throw wrapError(error, event)
+      this.stats.errorCount++;
+      throw wrapError(error, event);
     }
   }
 
@@ -68,35 +64,34 @@ export class EventBus {
    * @returns Unsubscribe function
    */
   on(event: string, handler: Function): () => void {
-    this.throwIfDestroyed()
-    
+    this.throwIfDestroyed();
+
     try {
-      validateParameters(event, handler)
-      
+      validateParameters(event, handler);
+
       if (!this.listeners.has(event)) {
-        this.listeners.set(event, new Set())
+        this.listeners.set(event, new Set());
       }
 
-      const eventListeners = this.listeners.get(event)!
-      
+      const eventListeners = this.listeners.get(event)!;
+
       // Check listener limit to prevent memory leaks
       if (eventListeners.size >= this.maxListeners) {
         throw BusErrorFactory.internal(
           `Maximum listeners (${this.maxListeners}) exceeded for event: ${event}`,
           undefined,
           { event, currentListeners: eventListeners.size }
-        )
+        );
       }
 
-      eventListeners.add(handler)
-      this.stats.totalSubscriptions++
+      eventListeners.add(handler);
+      this.stats.totalSubscriptions++;
 
       // Return unsubscribe function
-      return () => this.off(event, handler)
-
+      return () => this.off(event, handler);
     } catch (error) {
-      this.stats.errorCount++
-      throw wrapError(error, event)
+      this.stats.errorCount++;
+      throw wrapError(error, event);
     }
   }
 
@@ -107,25 +102,25 @@ export class EventBus {
    * @returns Unsubscribe function
    */
   once(event: string, handler: Function): () => void {
-    this.throwIfDestroyed()
-    
-    let unsubscribed = false
-    
-    const onceHandler = (payload: any) => {
-      if (unsubscribed) return
-      
-      unsubscribed = true
-      unsubscribe()
-      handler(payload)
-    }
+    this.throwIfDestroyed();
 
-    const unsubscribe = this.on(event, onceHandler)
-    
+    let unsubscribed = false;
+
+    const onceHandler = (payload: any) => {
+      if (unsubscribed) return;
+
+      unsubscribed = true;
+      unsubscribe();
+      handler(payload);
+    };
+
+    const unsubscribe = this.on(event, onceHandler);
+
     // Return unsubscribe function that prevents execution
     return () => {
-      unsubscribed = true
-      unsubscribe()
-    }
+      unsubscribed = true;
+      unsubscribe();
+    };
   }
 
   /**
@@ -134,29 +129,28 @@ export class EventBus {
    * @param handler Handler function to remove
    */
   off(event: string, handler: Function): void {
-    this.throwIfDestroyed()
-    
+    this.throwIfDestroyed();
+
     try {
-      validateParameters(event, handler)
-      
-      const eventListeners = this.listeners.get(event)
+      validateParameters(event, handler);
+
+      const eventListeners = this.listeners.get(event);
       if (!eventListeners) {
-        return // Event not found, silently return
+        return; // Event not found, silently return
       }
 
-      const removed = eventListeners.delete(handler)
+      const removed = eventListeners.delete(handler);
       if (removed) {
-        this.stats.totalUnsubscriptions++
+        this.stats.totalUnsubscriptions++;
       }
 
       // Clean up empty event sets to prevent memory leaks
       if (eventListeners.size === 0) {
-        this.listeners.delete(event)
+        this.listeners.delete(event);
       }
-
     } catch (error) {
-      this.stats.errorCount++
-      throw wrapError(error, event)
+      this.stats.errorCount++;
+      throw wrapError(error, event);
     }
   }
 
@@ -165,30 +159,29 @@ export class EventBus {
    * @param event Optional event name to target specific event
    */
   removeAllListeners(event?: string): void {
-    this.throwIfDestroyed()
-    
+    this.throwIfDestroyed();
+
     try {
       if (event !== undefined) {
-        validateParameters(event)
-        
-        const eventListeners = this.listeners.get(event)
+        validateParameters(event);
+
+        const eventListeners = this.listeners.get(event);
         if (eventListeners) {
-          this.stats.totalUnsubscriptions += eventListeners.size
-          this.listeners.delete(event)
+          this.stats.totalUnsubscriptions += eventListeners.size;
+          this.listeners.delete(event);
         }
       } else {
         // Remove all listeners for all events
-        let totalRemoved = 0
+        let totalRemoved = 0;
         this.listeners.forEach(listeners => {
-          totalRemoved += listeners.size
-        })
-        this.stats.totalUnsubscriptions += totalRemoved
-        this.listeners.clear()
+          totalRemoved += listeners.size;
+        });
+        this.stats.totalUnsubscriptions += totalRemoved;
+        this.listeners.clear();
       }
-
     } catch (error) {
-      this.stats.errorCount++
-      throw wrapError(error, event)
+      this.stats.errorCount++;
+      throw wrapError(error, event);
     }
   }
 
@@ -198,14 +191,14 @@ export class EventBus {
    * @returns Number of listeners
    */
   getListenerCount(event: string): number {
-    this.throwIfDestroyed()
-    
+    this.throwIfDestroyed();
+
     try {
-      validateParameters(event)
-      return this.listeners.get(event)?.size || 0
+      validateParameters(event);
+      return this.listeners.get(event)?.size || 0;
     } catch (error) {
-      this.stats.errorCount++
-      throw wrapError(error, event)
+      this.stats.errorCount++;
+      throw wrapError(error, event);
     }
   }
 
@@ -215,14 +208,14 @@ export class EventBus {
    * @returns True if event has listeners
    */
   hasListeners(event: string): boolean {
-    this.throwIfDestroyed()
-    
+    this.throwIfDestroyed();
+
     try {
-      validateParameters(event)
-      return this.getListenerCount(event) > 0
+      validateParameters(event);
+      return this.getListenerCount(event) > 0;
     } catch (error) {
-      this.stats.errorCount++
-      throw wrapError(error, event)
+      this.stats.errorCount++;
+      throw wrapError(error, event);
     }
   }
 
@@ -231,8 +224,8 @@ export class EventBus {
    * @returns Array of event names
    */
   getEventNames(): string[] {
-    this.throwIfDestroyed()
-    return Array.from(this.listeners.keys())
+    this.throwIfDestroyed();
+    return Array.from(this.listeners.keys());
   }
 
   /**
@@ -240,18 +233,20 @@ export class EventBus {
    * @returns Bus statistics object
    */
   getStats(): BusStats {
-    const activeListeners = Array.from(this.listeners.values())
-      .reduce((total, listeners) => total + listeners.size, 0)
+    const activeListeners = Array.from(this.listeners.values()).reduce(
+      (total, listeners) => total + listeners.size,
+      0
+    );
 
-    const memoryUsage = estimateObjectSize(this.listeners)
+    const memoryUsage = estimateObjectSize(this.listeners);
 
     return {
       totalEvents: this.stats.totalEvents,
       totalRequests: 0, // Will be overridden by request-response layer
       activeListeners,
       cacheSize: 0, // Will be overridden by cache layer
-      memoryUsage
-    }
+      memoryUsage,
+    };
   }
 
   /**
@@ -259,8 +254,8 @@ export class EventBus {
    * @returns Extended statistics object
    */
   getDetailedStats(): object {
-    const baseStats = this.getStats()
-    
+    const baseStats = this.getStats();
+
     return {
       ...baseStats,
       totalSubscriptions: this.stats.totalSubscriptions,
@@ -268,8 +263,8 @@ export class EventBus {
       errorCount: this.stats.errorCount,
       eventCount: this.listeners.size,
       maxListenersPerEvent: this.maxListeners,
-      isDestroyed: this.isDestroyed
-    }
+      isDestroyed: this.isDestroyed,
+    };
   }
 
   /**
@@ -282,10 +277,10 @@ export class EventBus {
         'setMaxListeners',
         'Max listeners must be a positive integer',
         { provided: max }
-      )
+      );
     }
-    
-    this.maxListeners = max
+
+    this.maxListeners = max;
   }
 
   /**
@@ -293,7 +288,7 @@ export class EventBus {
    * @returns Maximum listeners per event
    */
   getMaxListeners(): number {
-    return this.maxListeners
+    return this.maxListeners;
   }
 
   /**
@@ -301,7 +296,7 @@ export class EventBus {
    * @returns True if destroyed
    */
   isDestroyedState(): boolean {
-    return this.isDestroyed
+    return this.isDestroyed;
   }
 
   /**
@@ -310,28 +305,27 @@ export class EventBus {
    */
   destroy(): void {
     if (this.isDestroyed) {
-      return // Already destroyed
+      return; // Already destroyed
     }
 
     try {
       // Clear all listeners
-      this.listeners.clear()
-      
+      this.listeners.clear();
+
       // Reset stats
       this.stats = {
         totalEvents: 0,
         totalSubscriptions: 0,
         totalUnsubscriptions: 0,
-        errorCount: 0
-      }
-      
+        errorCount: 0,
+      };
+
       // Mark as destroyed
-      this.isDestroyed = true
-      
+      this.isDestroyed = true;
     } catch (error) {
       // Even if cleanup fails, mark as destroyed
-      this.isDestroyed = true
-      throw wrapError(error, 'destroy')
+      this.isDestroyed = true;
+      throw wrapError(error, 'destroy');
     }
   }
 
@@ -341,17 +335,17 @@ export class EventBus {
    * @returns Namespaced event bus wrapper
    */
   createNamespace(namespace: string): NamespacedEventBus {
-    this.throwIfDestroyed()
-    
+    this.throwIfDestroyed();
+
     if (!isValidEventName(namespace)) {
       throw BusErrorFactory.badRequest(
         'createNamespace',
         'Namespace must be a valid event name',
         { namespace }
-      )
+      );
     }
-    
-    return new NamespacedEventBus(this, namespace)
+
+    return new NamespacedEventBus(this, namespace);
   }
 
   /**
@@ -360,7 +354,7 @@ export class EventBus {
    */
   private throwIfDestroyed(): void {
     if (this.isDestroyed) {
-      throw BusErrorFactory.gone('event-bus', 'Event bus has been destroyed')
+      throw BusErrorFactory.gone('event-bus', 'Event bus has been destroyed');
     }
   }
 }
@@ -380,7 +374,7 @@ export class NamespacedEventBus {
    * @param payload Event payload
    */
   emit(event: string, payload: any): void {
-    this.eventBus.emit(`${this.namespace}:${event}`, payload)
+    this.eventBus.emit(`${this.namespace}:${event}`, payload);
   }
 
   /**
@@ -390,7 +384,7 @@ export class NamespacedEventBus {
    * @returns Unsubscribe function
    */
   on(event: string, handler: Function): () => void {
-    return this.eventBus.on(`${this.namespace}:${event}`, handler)
+    return this.eventBus.on(`${this.namespace}:${event}`, handler);
   }
 
   /**
@@ -400,7 +394,7 @@ export class NamespacedEventBus {
    * @returns Unsubscribe function
    */
   once(event: string, handler: Function): () => void {
-    return this.eventBus.once(`${this.namespace}:${event}`, handler)
+    return this.eventBus.once(`${this.namespace}:${event}`, handler);
   }
 
   /**
@@ -409,7 +403,7 @@ export class NamespacedEventBus {
    * @param handler Handler to remove
    */
   off(event: string, handler: Function): void {
-    this.eventBus.off(`${this.namespace}:${event}`, handler)
+    this.eventBus.off(`${this.namespace}:${event}`, handler);
   }
 
   /**
@@ -418,15 +412,15 @@ export class NamespacedEventBus {
    */
   removeAllListeners(event?: string): void {
     if (event !== undefined) {
-      this.eventBus.removeAllListeners(`${this.namespace}:${event}`)
+      this.eventBus.removeAllListeners(`${this.namespace}:${event}`);
     } else {
       // Remove all listeners for this namespace
-      const allEvents = this.eventBus.getEventNames()
-      const namespacePrefix = `${this.namespace}:`
-      
+      const allEvents = this.eventBus.getEventNames();
+      const namespacePrefix = `${this.namespace}:`;
+
       allEvents
         .filter(eventName => eventName.startsWith(namespacePrefix))
-        .forEach(eventName => this.eventBus.removeAllListeners(eventName))
+        .forEach(eventName => this.eventBus.removeAllListeners(eventName));
     }
   }
 
@@ -436,7 +430,7 @@ export class NamespacedEventBus {
    * @returns Number of listeners
    */
   getListenerCount(event: string): number {
-    return this.eventBus.getListenerCount(`${this.namespace}:${event}`)
+    return this.eventBus.getListenerCount(`${this.namespace}:${event}`);
   }
 
   /**
@@ -445,7 +439,7 @@ export class NamespacedEventBus {
    * @returns True if event has listeners
    */
   hasListeners(event: string): boolean {
-    return this.eventBus.hasListeners(`${this.namespace}:${event}`)
+    return this.eventBus.hasListeners(`${this.namespace}:${event}`);
   }
 
   /**
@@ -453,12 +447,12 @@ export class NamespacedEventBus {
    * @returns Array of event names (without namespace prefix)
    */
   getEventNames(): string[] {
-    const allEvents = this.eventBus.getEventNames()
-    const namespacePrefix = `${this.namespace}:`
-    
+    const allEvents = this.eventBus.getEventNames();
+    const namespacePrefix = `${this.namespace}:`;
+
     return allEvents
       .filter(eventName => eventName.startsWith(namespacePrefix))
-      .map(eventName => eventName.substring(namespacePrefix.length))
+      .map(eventName => eventName.substring(namespacePrefix.length));
   }
 
   /**
@@ -466,7 +460,7 @@ export class NamespacedEventBus {
    * @returns Namespace string
    */
   getNamespace(): string {
-    return this.namespace
+    return this.namespace;
   }
 
   /**
@@ -474,14 +468,14 @@ export class NamespacedEventBus {
    * @param subNamespace Sub-namespace name
    * @returns Nested namespaced event bus
    */
-//   namespace(subNamespace: string): NamespacedEventBus {
-//     return this.eventBus.createNamespace(`${this.namespace}:${subNamespace}`)
-//   }
+  //   namespace(subNamespace: string): NamespacedEventBus {
+  //     return this.eventBus.createNamespace(`${this.namespace}:${subNamespace}`)
+  //   }
 
   /**
    * Destroys this namespaced view (removes all listeners in namespace)
    */
   destroy(): void {
-    this.removeAllListeners()
+    this.removeAllListeners();
   }
 }

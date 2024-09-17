@@ -1,21 +1,26 @@
 /**
  * connectic - Shared State Management
- * 
+ *
  * This file implements reactive shared state that automatically synchronizes
  * across components and applications using the event bus.
  */
 
-import { BusErrorFactory, wrapError } from '../errors'
-import { SharedState } from '../types'
-import { EventBus } from './event-bus'
-import { deepClone, estimateObjectSize, safeExecute, validateParameters } from './utils'
+import { BusErrorFactory, wrapError } from '../errors';
+import { SharedState } from '../types';
+import { EventBus } from './event-bus';
+import {
+  deepClone,
+  estimateObjectSize,
+  safeExecute,
+  validateParameters,
+} from './utils';
 
 /**
  * Manages shared state instances for a bus
  */
 export class SharedStateManager {
-  private states = new Map<string, SharedStateImpl<any>>()
-  private isDestroyed = false
+  private states = new Map<string, SharedStateImpl<any>>();
+  private isDestroyed = false;
 
   constructor(private bus: EventBus) {}
 
@@ -26,26 +31,27 @@ export class SharedStateManager {
    * @returns SharedState instance
    */
   createState<T>(key: string, initialValue: T): SharedState<T> {
-    this.throwIfDestroyed()
+    this.throwIfDestroyed();
 
     try {
-      validateParameters(key)
+      validateParameters(key);
 
       // Check if state already exists
       if (this.states.has(key)) {
-        const existing = this.states.get(key)!
-        console.warn(`State "${key}" already exists. Returning existing instance.`)
-        return existing as SharedState<T>
+        const existing = this.states.get(key)!;
+        console.warn(
+          `State "${key}" already exists. Returning existing instance.`
+        );
+        return existing as SharedState<T>;
       }
 
       // Create new state instance
-      const state = new SharedStateImpl(key, initialValue, this.bus, this)
-      this.states.set(key, state)
+      const state = new SharedStateImpl(key, initialValue, this.bus, this);
+      this.states.set(key, state);
 
-      return state
-
+      return state;
     } catch (error) {
-      throw wrapError(error, `createState:${key}`)
+      throw wrapError(error, `createState:${key}`);
     }
   }
 
@@ -55,13 +61,13 @@ export class SharedStateManager {
    * @returns SharedState instance or undefined
    */
   getState<T>(key: string): SharedState<T> | undefined {
-    this.throwIfDestroyed()
+    this.throwIfDestroyed();
 
     try {
-      validateParameters(key)
-      return this.states.get(key) as SharedState<T> | undefined
+      validateParameters(key);
+      return this.states.get(key) as SharedState<T> | undefined;
     } catch (error) {
-      throw wrapError(error, `getState:${key}`)
+      throw wrapError(error, `getState:${key}`);
     }
   }
 
@@ -71,13 +77,13 @@ export class SharedStateManager {
    * @returns Current state value or undefined
    */
   getStateValue<T>(key: string): T | undefined {
-    this.throwIfDestroyed()
+    this.throwIfDestroyed();
 
     try {
-      const state = this.getState<T>(key)
-      return state?.get()
+      const state = this.getState<T>(key);
+      return state?.get();
     } catch (error) {
-      throw wrapError(error, `getStateValue:${key}`)
+      throw wrapError(error, `getStateValue:${key}`);
     }
   }
 
@@ -87,21 +93,20 @@ export class SharedStateManager {
    * @param value New state value
    */
   setState<T>(key: string, value: T): void {
-    this.throwIfDestroyed()
+    this.throwIfDestroyed();
 
     try {
-      validateParameters(key)
+      validateParameters(key);
 
-      let state = this.getState<T>(key)
+      let state = this.getState<T>(key);
       if (!state) {
         // Create state if it doesn't exist
-        state = this.createState(key, value)
+        state = this.createState(key, value);
       } else {
-        state.set(value)
+        state.set(value);
       }
-
     } catch (error) {
-      throw wrapError(error, `setState:${key}`)
+      throw wrapError(error, `setState:${key}`);
     }
   }
 
@@ -111,27 +116,26 @@ export class SharedStateManager {
    * @returns True if state was removed
    */
   removeState(key: string): boolean {
-    this.throwIfDestroyed()
+    this.throwIfDestroyed();
 
     try {
-      validateParameters(key)
+      validateParameters(key);
 
-      const state = this.states.get(key)
+      const state = this.states.get(key);
       if (!state) {
-        return false
+        return false;
       }
 
       // Destroy the state instance
-      state.destroy()
-      this.states.delete(key)
+      state.destroy();
+      this.states.delete(key);
 
       // Emit removal event for cross-app synchronization
-      this.bus.emit(`state:${key}:removed`, undefined)
+      this.bus.emit(`state:${key}:removed`, undefined);
 
-      return true
-
+      return true;
     } catch (error) {
-      throw wrapError(error, `removeState:${key}`)
+      throw wrapError(error, `removeState:${key}`);
     }
   }
 
@@ -140,8 +144,8 @@ export class SharedStateManager {
    * @returns Array of state keys
    */
   getStateKeys(): string[] {
-    this.throwIfDestroyed()
-    return Array.from(this.states.keys())
+    this.throwIfDestroyed();
+    return Array.from(this.states.keys());
   }
 
   /**
@@ -149,24 +153,25 @@ export class SharedStateManager {
    * @returns State manager statistics
    */
   getStats(): object {
-    const totalStates = this.states.size
-    let totalSubscribers = 0
-    let totalMemoryUsage = 0
+    const totalStates = this.states.size;
+    let totalSubscribers = 0;
+    let totalMemoryUsage = 0;
 
-    this.states.forEach((state, key) => {
-      const stateStats = (state as any).getStats()
-      totalSubscribers += stateStats.subscriberCount
-      totalMemoryUsage += stateStats.memoryUsage
-    })
+    this.states.forEach(state => {
+      const stateStats = (state as any).getStats();
+      totalSubscribers += stateStats.subscriberCount;
+      totalMemoryUsage += stateStats.memoryUsage;
+    });
 
     return {
       totalStates,
       totalSubscribers,
       totalMemoryUsage,
-      averageSubscribersPerState: totalStates > 0 ? totalSubscribers / totalStates : 0,
+      averageSubscribersPerState:
+        totalStates > 0 ? totalSubscribers / totalStates : 0,
       stateKeys: Array.from(this.states.keys()),
-      isDestroyed: this.isDestroyed
-    }
+      isDestroyed: this.isDestroyed,
+    };
   }
 
   /**
@@ -174,25 +179,24 @@ export class SharedStateManager {
    */
   destroy(): void {
     if (this.isDestroyed) {
-      return
+      return;
     }
 
     try {
       // Destroy all states
       this.states.forEach((state, key) => {
         try {
-          state.destroy()
+          state.destroy();
         } catch (error) {
-          console.warn(`Error destroying state "${key}":`, error)
+          console.warn(`Error destroying state "${key}":`, error);
         }
-      })
+      });
 
-      this.states.clear()
-      this.isDestroyed = true
-
+      this.states.clear();
+      this.isDestroyed = true;
     } catch (error) {
-      this.isDestroyed = true
-      throw wrapError(error, 'sharedStateManager.destroy')
+      this.isDestroyed = true;
+      throw wrapError(error, 'sharedStateManager.destroy');
     }
   }
 
@@ -202,7 +206,7 @@ export class SharedStateManager {
    * @internal
    */
   _handleStateDestroyed(key: string): void {
-    this.states.delete(key)
+    this.states.delete(key);
   }
 
   /**
@@ -210,7 +214,7 @@ export class SharedStateManager {
    * @returns True if destroyed
    */
   isDestroyedState(): boolean {
-    return this.isDestroyed
+    return this.isDestroyed;
   }
 
   /**
@@ -219,7 +223,10 @@ export class SharedStateManager {
    */
   private throwIfDestroyed(): void {
     if (this.isDestroyed) {
-      throw BusErrorFactory.gone('sharedStateManager', 'Shared state manager has been destroyed')
+      throw BusErrorFactory.gone(
+        'sharedStateManager',
+        'Shared state manager has been destroyed'
+      );
     }
   }
 }
@@ -228,10 +235,10 @@ export class SharedStateManager {
  * Implementation of reactive shared state
  */
 export class SharedStateImpl<T> implements SharedState<T> {
-  private value: T
-  private subscribers = new Set<(value: T) => void>()
-  private isDestroyed = false
-  private unsubscribeFromBus: (() => void) | null = null
+  private value: T;
+  private subscribers = new Set<(value: T) => void>();
+  private isDestroyed = false;
+  private unsubscribeFromBus: (() => void) | null = null;
 
   constructor(
     private key: string,
@@ -239,8 +246,8 @@ export class SharedStateImpl<T> implements SharedState<T> {
     private bus: EventBus,
     private manager: SharedStateManager
   ) {
-    this.value = this.cloneValue(initialValue)
-    this.setupCrossAppSynchronization()
+    this.value = this.cloneValue(initialValue);
+    this.setupCrossAppSynchronization();
   }
 
   /**
@@ -248,8 +255,8 @@ export class SharedStateImpl<T> implements SharedState<T> {
    * @returns Current state value
    */
   get(): T {
-    this.throwIfDestroyed()
-    return this.cloneValue(this.value)
+    this.throwIfDestroyed();
+    return this.cloneValue(this.value);
   }
 
   /**
@@ -257,25 +264,24 @@ export class SharedStateImpl<T> implements SharedState<T> {
    * @param value New state value
    */
   set(value: T): void {
-    this.throwIfDestroyed()
+    this.throwIfDestroyed();
 
     try {
-      const oldValue = this.value
-      const newValue = this.cloneValue(value)
+      const oldValue = this.value;
+      const newValue = this.cloneValue(value);
 
       // Only update if value actually changed
       if (!this.valuesEqual(oldValue, newValue)) {
-        this.value = newValue
+        this.value = newValue;
 
         // Notify local subscribers
-        this.notifySubscribers(newValue)
+        this.notifySubscribers(newValue);
 
         // Emit bus event for cross-app synchronization
-        this.bus.emit(`state:${this.key}:changed`, newValue)
+        this.bus.emit(`state:${this.key}:changed`, newValue);
       }
-
     } catch (error) {
-      throw wrapError(error, `setState:${this.key}`)
+      throw wrapError(error, `setState:${this.key}`);
     }
   }
 
@@ -285,7 +291,7 @@ export class SharedStateImpl<T> implements SharedState<T> {
    * @returns Unsubscribe function
    */
   subscribe(callback: (value: T) => void): () => void {
-    this.throwIfDestroyed()
+    this.throwIfDestroyed();
 
     try {
       if (typeof callback !== 'function') {
@@ -293,18 +299,17 @@ export class SharedStateImpl<T> implements SharedState<T> {
           'subscribe',
           'Callback must be a function',
           { key: this.key, callback: typeof callback }
-        )
+        );
       }
 
-      this.subscribers.add(callback)
+      this.subscribers.add(callback);
 
       // Return unsubscribe function
       return () => {
-        this.subscribers.delete(callback)
-      }
-
+        this.subscribers.delete(callback);
+      };
     } catch (error) {
-      throw wrapError(error, `subscribe:${this.key}`)
+      throw wrapError(error, `subscribe:${this.key}`);
     }
   }
 
@@ -313,7 +318,7 @@ export class SharedStateImpl<T> implements SharedState<T> {
    * @param updater Function that receives current value and returns new value
    */
   update(updater: (currentValue: T) => T): void {
-    this.throwIfDestroyed()
+    this.throwIfDestroyed();
 
     try {
       if (typeof updater !== 'function') {
@@ -321,15 +326,14 @@ export class SharedStateImpl<T> implements SharedState<T> {
           'update',
           'Updater must be a function',
           { key: this.key, updater: typeof updater }
-        )
+        );
       }
 
-      const currentValue = this.get()
-      const newValue = updater(currentValue)
-      this.set(newValue)
-
+      const currentValue = this.get();
+      const newValue = updater(currentValue);
+      this.set(newValue);
     } catch (error) {
-      throw wrapError(error, `update:${this.key}`)
+      throw wrapError(error, `update:${this.key}`);
     }
   }
 
@@ -341,11 +345,12 @@ export class SharedStateImpl<T> implements SharedState<T> {
     return {
       key: this.key,
       subscriberCount: this.subscribers.size,
-      memoryUsage: estimateObjectSize(this.value) + estimateObjectSize(this.subscribers),
+      memoryUsage:
+        estimateObjectSize(this.value) + estimateObjectSize(this.subscribers),
       hasValue: this.value !== undefined && this.value !== null,
       valueType: typeof this.value,
-      isDestroyed: this.isDestroyed
-    }
+      isDestroyed: this.isDestroyed,
+    };
   }
 
   /**
@@ -353,27 +358,26 @@ export class SharedStateImpl<T> implements SharedState<T> {
    */
   destroy(): void {
     if (this.isDestroyed) {
-      return
+      return;
     }
 
     try {
       // Unsubscribe from bus events
       if (this.unsubscribeFromBus) {
-        this.unsubscribeFromBus()
-        this.unsubscribeFromBus = null
+        this.unsubscribeFromBus();
+        this.unsubscribeFromBus = null;
       }
 
       // Clear all subscribers
-      this.subscribers.clear()
+      this.subscribers.clear();
 
       // Notify manager of destruction
-      this.manager._handleStateDestroyed(this.key)
+      this.manager._handleStateDestroyed(this.key);
 
-      this.isDestroyed = true
-
+      this.isDestroyed = true;
     } catch (error) {
-      this.isDestroyed = true
-      throw wrapError(error, `destroyState:${this.key}`)
+      this.isDestroyed = true;
+      throw wrapError(error, `destroyState:${this.key}`);
     }
   }
 
@@ -382,7 +386,7 @@ export class SharedStateImpl<T> implements SharedState<T> {
    * @returns True if destroyed
    */
   isDestroyedState(): boolean {
-    return this.isDestroyed
+    return this.isDestroyed;
   }
 
   /**
@@ -396,11 +400,11 @@ export class SharedStateImpl<T> implements SharedState<T> {
       (newValue: T) => {
         // Avoid infinite loops by checking if value actually changed
         if (!this.valuesEqual(this.value, newValue)) {
-          this.value = this.cloneValue(newValue)
-          this.notifySubscribers(newValue)
+          this.value = this.cloneValue(newValue);
+          this.notifySubscribers(newValue);
         }
       }
-    )
+    );
   }
 
   /**
@@ -408,14 +412,14 @@ export class SharedStateImpl<T> implements SharedState<T> {
    * @private
    */
   private notifySubscribers(value: T): void {
-    const clonedValue = this.cloneValue(value)
-    
+    const clonedValue = this.cloneValue(value);
+
     this.subscribers.forEach(callback => {
       safeExecute(
         () => callback(clonedValue),
         `state subscriber for '${this.key}'`
-      )
-    })
+      );
+    });
   }
 
   /**
@@ -424,14 +428,14 @@ export class SharedStateImpl<T> implements SharedState<T> {
    */
   private cloneValue(value: T): T {
     if (value === null || value === undefined) {
-      return value
+      return value;
     }
 
     if (typeof value === 'object') {
-      return deepClone(value)
+      return deepClone(value);
     }
 
-    return value
+    return value;
   }
 
   /**
@@ -440,27 +444,27 @@ export class SharedStateImpl<T> implements SharedState<T> {
    */
   private valuesEqual(a: T, b: T): boolean {
     if (a === b) {
-      return true
+      return true;
     }
 
     if (a === null || b === null || a === undefined || b === undefined) {
-      return a === b
+      return a === b;
     }
 
     if (typeof a !== typeof b) {
-      return false
+      return false;
     }
 
     if (typeof a === 'object' && typeof b === 'object') {
       try {
-        return JSON.stringify(a) === JSON.stringify(b)
+        return JSON.stringify(a) === JSON.stringify(b);
       } catch {
         // Fallback to reference equality for non-serializable objects
-        return a === b
+        return a === b;
       }
     }
 
-    return false
+    return false;
   }
 
   /**
@@ -469,7 +473,10 @@ export class SharedStateImpl<T> implements SharedState<T> {
    */
   private throwIfDestroyed(): void {
     if (this.isDestroyed) {
-      throw BusErrorFactory.gone(`state:${this.key}`, 'State has been destroyed')
+      throw BusErrorFactory.gone(
+        `state:${this.key}`,
+        'State has been destroyed'
+      );
     }
   }
 }
@@ -492,36 +499,36 @@ export class SharedStateUtils {
     initialValue: T,
     storageKey?: string
   ): SharedState<T> {
-    const storage = storageKey || `connectic_state_${key}`
-    
+    const storage = storageKey || `connectic_state_${key}`;
+
     // Try to load from localStorage
-    let storedValue = initialValue
+    let storedValue = initialValue;
     if (typeof localStorage !== 'undefined') {
       try {
-        const stored = localStorage.getItem(storage)
+        const stored = localStorage.getItem(storage);
         if (stored !== null) {
-          storedValue = JSON.parse(stored)
+          storedValue = JSON.parse(stored);
         }
       } catch (error) {
-        console.warn(`Failed to load persisted state for "${key}":`, error)
+        console.warn(`Failed to load persisted state for "${key}":`, error);
       }
     }
 
     // Create state with stored/initial value
-    const state = manager.createState(key, storedValue)
+    const state = manager.createState(key, storedValue);
 
     // Subscribe to changes and persist to localStorage
     if (typeof localStorage !== 'undefined') {
-      state.subscribe((value) => {
+      state.subscribe(value => {
         try {
-          localStorage.setItem(storage, JSON.stringify(value))
+          localStorage.setItem(storage, JSON.stringify(value));
         } catch (error) {
-          console.warn(`Failed to persist state for "${key}":`, error)
+          console.warn(`Failed to persist state for "${key}":`, error);
         }
-      })
+      });
     }
 
-    return state
+    return state;
   }
 
   /**
@@ -537,42 +544,42 @@ export class SharedStateUtils {
     computeFn: (...values: any[]) => T
   ): SharedState<T> {
     // Get initial values and compute initial result
-    const initialValues = sources.map(key => manager.getStateValue(key))
-    const initialValue = computeFn(...initialValues)
+    const initialValues = sources.map(key => manager.getStateValue(key));
+    const initialValue = computeFn(...initialValues);
 
     // Create derived state
-    const derivedKey = `derived_${sources.join('_')}_${Date.now()}`
-    const derivedState = manager.createState(derivedKey, initialValue)
+    const derivedKey = `derived_${sources.join('_')}_${Date.now()}`;
+    const derivedState = manager.createState(derivedKey, initialValue);
 
     // Set up subscriptions to source states
-    const unsubscribers: (() => void)[] = []
+    const unsubscribers: (() => void)[] = [];
 
     const recompute = () => {
       try {
-        const currentValues = sources.map(key => manager.getStateValue(key))
-        const newValue = computeFn(...currentValues)
-        derivedState.set(newValue)
+        const currentValues = sources.map(key => manager.getStateValue(key));
+        const newValue = computeFn(...currentValues);
+        derivedState.set(newValue);
       } catch (error) {
-        console.warn(`Error recomputing derived state:`, error)
+        console.warn(`Error recomputing derived state:`, error);
       }
-    }
+    };
 
     sources.forEach(sourceKey => {
-      const sourceState = manager.getState(sourceKey)
+      const sourceState = manager.getState(sourceKey);
       if (sourceState) {
-        const unsubscribe = sourceState.subscribe(() => recompute())
-        unsubscribers.push(unsubscribe)
+        const unsubscribe = sourceState.subscribe(() => recompute());
+        unsubscribers.push(unsubscribe);
       }
-    })
+    });
 
     // Override destroy to clean up subscriptions
-    const originalDestroy = derivedState.destroy.bind(derivedState)
+    const originalDestroy = derivedState.destroy.bind(derivedState);
     derivedState.destroy = () => {
-      unsubscribers.forEach(unsub => unsub())
-      originalDestroy()
-    }
+      unsubscribers.forEach(unsub => unsub());
+      originalDestroy();
+    };
 
-    return derivedState
+    return derivedState;
   }
 
   /**
@@ -589,22 +596,22 @@ export class SharedStateUtils {
     initialValue: T,
     delayMs: number
   ): SharedState<T> {
-    const state = manager.createState(key, initialValue)
-    let timeoutId: NodeJS.Timeout | null = null
+    const state = manager.createState(key, initialValue);
+    let timeoutId: NodeJS.Timeout | null = null;
 
     // Override set method with debouncing
-    const originalSet = state.set.bind(state)
+    const originalSet = state.set.bind(state);
     state.set = (value: T) => {
       if (timeoutId) {
-        clearTimeout(timeoutId)
+        clearTimeout(timeoutId);
       }
-      
-      timeoutId = setTimeout(() => {
-        originalSet(value)
-        timeoutId = null
-      }, delayMs)
-    }
 
-    return state
+      timeoutId = setTimeout(() => {
+        originalSet(value);
+        timeoutId = null;
+      }, delayMs);
+    };
+
+    return state;
   }
 }
