@@ -609,49 +609,69 @@ export class ComputedStateUtils {
    */
   static createAsync<T>(
     manager: ComputedStateManager,
+    stateManager: import('./shared-state').SharedStateManager,
     asyncComputeFn: () => Promise<T>,
     initialValue: T
   ): ComputedState<{ value: T; loading: boolean; error: Error | null }> {
+    // Create internal state to trigger recomputation
+    const asyncStateKey = `async_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
+    const asyncState = stateManager.createState(asyncStateKey, {
+      value: initialValue,
+      loading: false,
+      error: null as Error | null,
+      version: 0,
+    });
+
     let currentPromise: Promise<T> | null = null;
 
     return manager.createComputed(() => {
-      // Start async computation
+      // Get current async state to create dependency
+      const currentAsyncState = asyncState.get();
+
+      // Start async computation if not already running
       const promise = asyncComputeFn();
 
       if (promise !== currentPromise) {
         currentPromise = promise;
 
-        // Return loading state initially
-        const result = {
-          value: initialValue,
+        // Update to loading state
+        asyncState.set({
+          value: currentAsyncState.value,
           loading: true,
           error: null,
-        };
+          version: currentAsyncState.version + 1,
+        });
 
         // Handle async result
         promise
           .then(value => {
             if (promise === currentPromise) {
-              // Update with resolved value
-              // Note: This would need additional mechanism to trigger recomputation
-              // In a real implementation, this might use a reactive primitive
+              asyncState.set({
+                value,
+                loading: false,
+                error: null,
+                version: currentAsyncState.version + 1,
+              });
             }
           })
           .catch(error => {
             if (promise === currentPromise) {
-              // Update with error
-              // Note: Similar limitation as above
+              asyncState.set({
+                value: currentAsyncState.value,
+                loading: false,
+                error:
+                  error instanceof Error ? error : new Error(String(error)),
+                version: currentAsyncState.version + 1,
+              });
             }
           });
-
-        return result;
       }
 
-      // Return current state (this is a simplified implementation)
+      // Return current async state
       return {
-        value: initialValue,
-        loading: false,
-        error: null,
+        value: currentAsyncState.value,
+        loading: currentAsyncState.loading,
+        error: currentAsyncState.error,
       };
     });
   }
@@ -686,7 +706,7 @@ export class ComputedStateUtils {
       timeoutId = setTimeout(() => {
         debouncedValue = lastValue;
         // Force recomputation of debounced computed
-        // Note: This would need additional mechanism in real implementation
+        // Needs touch : Note: This would need additional mechanism
         timeoutId = null;
       }, delayMs);
     });

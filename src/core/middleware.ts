@@ -545,11 +545,11 @@ export class BuiltinMiddleware {
     const { maxRequests, windowMs } = options;
 
     return (
-      _payload: any,
+      payload: any,
       next: () => void,
       cancel: (reason?: string) => void
     ) => {
-      const key = 'global'; // In real implementation, might use user ID or IP
+      const key = payload?.key;
       const now = Date.now();
       const windowStart = now - windowMs;
 

@@ -398,7 +398,7 @@ export class BuiltinInterceptors {
       successField = 'success',
     } = format;
 
-    return (event: string, response: any) => {
+    return (_event: string, response: any) => {
       // If response is already normalized, return as-is
       if (response && typeof response === 'object' && dataField in response) {
         return response;
@@ -443,7 +443,7 @@ export class BuiltinInterceptors {
     sensitiveFields: string[],
     replacement: any = '[FILTERED]'
   ): RequestInterceptor {
-    return (event: string, payload: any) => {
+    return (_event: string, payload: any) => {
       if (!payload || typeof payload !== 'object') {
         return payload;
       }
@@ -550,7 +550,7 @@ export class BuiltinInterceptors {
    * @returns Request interceptor
    */
   static circuitBreaker(
-    failureThreshold: number,
+    _failureThreshold: number,
     resetTimeoutMs: number
   ): RequestInterceptor {
     const circuits = new Map<
@@ -749,7 +749,7 @@ export class InterceptorUtils {
    * @returns Request interceptor
    */
   static addTimestamp(field: string = 'timestamp'): RequestInterceptor {
-    return (event: string, payload: any) => {
+    return (_event: string, payload: any) => {
       return {
         ...payload,
         [field]: Date.now(),
@@ -781,7 +781,7 @@ export class InterceptorUtils {
     getToken: () => string | null,
     field: string = 'authToken'
   ): RequestInterceptor {
-    return (event: string, payload: any) => {
+    return (_event: string, payload: any) => {
       const token = getToken();
       if (token) {
         return {

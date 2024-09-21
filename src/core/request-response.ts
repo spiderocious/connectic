@@ -5,25 +5,24 @@
  * using correlation IDs, timeouts, retries, and intelligent caching.
  */
 
+import { BusError, BusErrorCode, BusErrorFactory, wrapError } from '../errors';
 import {
-  RequestOptions,
-  RequestManyOptions,
   BatchRequest,
   PendingRequest,
+  RequestManyOptions,
+  RequestOptions,
 } from '../types';
-import { BusError, BusErrorFactory, wrapError, BusErrorCode } from '../errors';
+import { CacheManager } from './cache';
+import { EventBus } from './event-bus';
+import { ResponderBuilder } from './middleware';
 import {
-  validateParameters,
-  generateId,
   delay,
   exponentialBackoff,
-  safeExecuteAsync,
-  isValidTimeout,
+  generateId,
   isValidRetries,
+  isValidTimeout,
+  validateParameters,
 } from './utils';
-import { EventBus } from './event-bus';
-import { CacheManager } from './cache';
-import { ResponderBuilder } from './middleware';
 
 /**
  * Manages request/response communication patterns
