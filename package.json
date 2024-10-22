@@ -27,27 +27,30 @@
     "prepublishOnly": "npm run build && npm run test"
   },
   "keywords": [
-    "money",
-    "currency",
-    "finance",
-    "utilities",
-    "formatting",
-    "conversion",
-    "typescript",
+    "event-bus",
+    "microfrontend",
+    "communication",
+    "state-management",
+    "pub-sub",
+    "request-response",
+    "real-time",
+    "data-synchronization",
     "javascript",
-    "payments",
-    "calculations"
+    "typescript",
+    "framework-agnostic",
+    "mfe",
+    "event-driven"
   ],
   "author": "",
   "license": "MIT",
   "repository": {
     "type": "git",
-    "url": "git+https://github.com/connectic.git"
+    "url": "git+https://github.com/spiderocious/connectic.git"
   },
   "bugs": {
-    "url": "https://github.com/connectic/issues"
+    "url": "https://github.com/spiderocious/connectic/issues"
   },
-  "homepage": "https://github.com/connectic#readme",
+  "homepage": "https://github.com/spiderocious/connectic#readme",
   "devDependencies": {
     "@commitlint/cli": "^19.8.1",
     "@commitlint/config-conventional": "^19.8.1",

@@ -77,9 +77,3 @@ Thumbs.db
 
 # Documentation build
 typedoc/
-
-# Keep docs folder but ignore auto-generated content
-!docs/
-
-docs/
-docs/*
