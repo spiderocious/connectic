@@ -48,7 +48,12 @@ export class SharedStateManager {
       }
 
       // Create new state instance
-      const state = new SharedStateImpl(key, initialValue, this.bus, new WeakRef(this));
+      const state = new SharedStateImpl(
+        key,
+        initialValue,
+        this.bus,
+        new WeakRef(this)
+      );
       this.states.set(key, state);
 
       return state;
@@ -245,7 +250,11 @@ export class SharedStateManager {
    * Detects circular dependencies using DFS
    * @private
    */
-  private hasCircularDependency(startKey: string, targetKey: string, visited = new Set<string>()): boolean {
+  private hasCircularDependency(
+    startKey: string,
+    targetKey: string,
+    visited = new Set<string>()
+  ): boolean {
     if (visited.has(targetKey)) {
       return targetKey === startKey;
     }
@@ -344,7 +353,8 @@ export class SharedStateImpl<T> implements SharedState<T> {
     }
 
     try {
-      const trackingContext = (globalThis as any).__CONNECTIC_TRACKING_CONTEXT__;
+      const trackingContext = (globalThis as any)
+        .__CONNECTIC_TRACKING_CONTEXT__;
       if (trackingContext && trackingContext.isTracking) {
         trackingContext.dependencies.add(this);
       }
@@ -381,7 +391,7 @@ export class SharedStateImpl<T> implements SharedState<T> {
           value: newValue,
           sequence: this.updateSequence,
           timestamp: Date.now(),
-          source: 'local'
+          source: 'local',
         });
       }
     } catch (error) {
@@ -536,7 +546,11 @@ export class SharedStateImpl<T> implements SharedState<T> {
         let sequence: number;
         let source: string;
 
-        if (changeEvent && typeof changeEvent === 'object' && 'value' in changeEvent) {
+        if (
+          changeEvent &&
+          typeof changeEvent === 'object' &&
+          'value' in changeEvent
+        ) {
           // New format with metadata
           newValue = changeEvent.value;
           sequence = changeEvent.sequence || 0;

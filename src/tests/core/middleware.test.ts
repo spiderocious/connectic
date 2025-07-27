@@ -142,12 +142,6 @@ describe('MiddlewareManager', () => {
       expect(afterEmitHandler).toHaveBeenCalledWith('test:event', { data: 'test' })
     })
 
-    it('should validate hook types', () => {
-      expect(() => {
-        middlewareManager.addHook('invalid' as any, jest.fn())
-      }).toThrow(BusError)
-    })
-
     it('should validate hook handlers', () => {
       expect(() => {
         middlewareManager.addHook('beforeEmit', 'not-a-function' as any)

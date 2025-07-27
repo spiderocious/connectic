@@ -36,10 +36,7 @@ export class ComputedStateManager {
         );
       }
 
-      const computed = new ComputedStateImpl(
-        computeFn,
-        new WeakRef(this)
-      );
+      const computed = new ComputedStateImpl(computeFn, new WeakRef(this));
       this.computedStates.add(computed);
 
       return computed;
@@ -328,7 +325,7 @@ export class ComputedStateImpl<T> implements ComputedState<T> {
     // Create a tracking context
     const trackingContext = {
       isTracking: true,
-      dependencies: newDependencies
+      dependencies: newDependencies,
     };
 
     // Use a global tracking context instead of method overriding

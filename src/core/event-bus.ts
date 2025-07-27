@@ -109,14 +109,14 @@ export class EventBus {
 
     const onceHandler = (payload: any) => {
       if (unsubscribed) return;
-      
+
       // Immediately unsubscribe to prevent multiple calls
       unsubscribed = true;
       if (internalUnsubscribe) {
         internalUnsubscribe();
         internalUnsubscribe = null;
       }
-      
+
       // Call the original handler
       try {
         handler(payload);
@@ -410,44 +410,44 @@ export class NamespacedEventBus {
    * @param handler Event handler
    * @returns Unsubscribe function
    */
-once(event: string, handler: Function): () => void {
-  this.throwIfDestroyed();
+  once(event: string, handler: Function): () => void {
+    this.throwIfDestroyed();
 
-  let unsubscribed = false;
-  let internalUnsubscribe: (() => void) | null = null;
+    let unsubscribed = false;
+    let internalUnsubscribe: (() => void) | null = null;
 
-  const onceHandler = (payload: any) => {
-    if (unsubscribed) return;
-    
-    // Immediately unsubscribe to prevent multiple calls
-    unsubscribed = true;
-    if (internalUnsubscribe) {
-      internalUnsubscribe();
-      internalUnsubscribe = null;
-    }
-    
-    // Call the original handler
-    try {
-      handler(payload);
-    } catch (error) {
-      console.error(`Error in once handler for ${event}:`, error);
-    }
-  };
+    const onceHandler = (payload: any) => {
+      if (unsubscribed) return;
 
-  // Set up the subscription and store the unsubscribe function
-  internalUnsubscribe = this.on(event, onceHandler);
-
-  // Return unsubscribe function that prevents execution and cleans up
-  return () => {
-    if (!unsubscribed) {
+      // Immediately unsubscribe to prevent multiple calls
       unsubscribed = true;
       if (internalUnsubscribe) {
         internalUnsubscribe();
         internalUnsubscribe = null;
       }
-    }
-  };
-}
+
+      // Call the original handler
+      try {
+        handler(payload);
+      } catch (error) {
+        console.error(`Error in once handler for ${event}:`, error);
+      }
+    };
+
+    // Set up the subscription and store the unsubscribe function
+    internalUnsubscribe = this.on(event, onceHandler);
+
+    // Return unsubscribe function that prevents execution and cleans up
+    return () => {
+      if (!unsubscribed) {
+        unsubscribed = true;
+        if (internalUnsubscribe) {
+          internalUnsubscribe();
+          internalUnsubscribe = null;
+        }
+      }
+    };
+  }
 
   /**
    * Removes a specific handler from a namespaced event

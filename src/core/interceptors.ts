@@ -133,7 +133,7 @@ export class InterceptorManager {
 
         try {
           const result = interceptor(event, transformedPayload);
-          
+
           if (result !== undefined) {
             transformedPayload = result;
           }
@@ -143,10 +143,10 @@ export class InterceptorManager {
             `Request interceptor #${i} failed for event '${event}':`,
             error
           );
-          
+
           errors.push({ index: i, error });
           this.stats.requestErrors++;
-          
+
           // Continue with the next interceptor
           continue;
         }
@@ -202,10 +202,14 @@ export class InterceptorManager {
         } catch (error) {
           errors.push(error as Error);
           console.warn(`Response interceptor #${i} failed:`, error);
-          
+
           // If more than 50% of interceptors fail, throw
           if (errors.length / this.responseInterceptors.length > 0.5) {
-            throw new BusError('Too many response interceptor failures', BusErrorCode.INTERNAL_ERROR, { errors });
+            throw new BusError(
+              'Too many response interceptor failures',
+              BusErrorCode.INTERNAL_ERROR,
+              { errors }
+            );
           }
         }
       }

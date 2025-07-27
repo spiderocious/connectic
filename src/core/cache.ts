@@ -17,7 +17,7 @@ export class CacheManager {
   private config: Required<CacheConfig>;
   private cleanupTimer: NodeJS.Timeout | undefined;
   private accessOrder = new Map<string, number>();
-  private accessCounter = 0; 
+  private accessCounter = 0;
   private stats = {
     hits: 0,
     misses: 0,
@@ -398,7 +398,7 @@ export class CacheManager {
 
     // Get the first (oldest) entry from accessOrder Map
     const oldestKey = this.accessOrder.keys().next().value;
-    
+
     if (oldestKey && this.cache.has(oldestKey)) {
       this.cache.delete(oldestKey);
       this.accessOrder.delete(oldestKey);

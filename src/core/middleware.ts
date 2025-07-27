@@ -141,7 +141,10 @@ export class MiddlewareManager {
    */
   private getPluginDependencies(plugin: BusPlugin): string[] {
     // Check if plugin has dependency information
-    if ('dependencies' in plugin && Array.isArray((plugin as any).dependencies)) {
+    if (
+      'dependencies' in plugin &&
+      Array.isArray((plugin as any).dependencies)
+    ) {
       return (plugin as any).dependencies;
     }
     return [];
@@ -260,7 +263,7 @@ export class MiddlewareManager {
     try {
       // Uninstall plugins in reverse dependency order
       const uninstallOrder = this.calculateDestructionOrder();
-      
+
       uninstallOrder.forEach(plugin => {
         try {
           if (typeof plugin.uninstall === 'function') {
@@ -303,7 +306,7 @@ export class MiddlewareManager {
       }
 
       visiting.add(pluginName);
-      
+
       // Visit all plugins that depend on this one (reverse dependencies)
       this.plugins.forEach(plugin => {
         const deps = this.pluginDependencies.get(plugin.name) || [];
@@ -314,7 +317,7 @@ export class MiddlewareManager {
 
       visiting.delete(pluginName);
       visited.add(pluginName);
-      
+
       // Add the plugin itself
       const plugin = this.plugins.find(p => p.name === pluginName);
       if (plugin) {
@@ -489,7 +492,7 @@ export class ResponderBuilder<K> {
 
     for (let i = 0; i < this.middlewares.length; i++) {
       if (cancelled) {
-        break; 
+        break;
       }
 
       const middleware = this.middlewares[i];
