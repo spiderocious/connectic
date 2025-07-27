@@ -365,7 +365,17 @@ export class ResponderBuilder<K> {
 
         // Execute final handler
         if (this.handlerFn) {
-          return await this.handlerFn(processedPayload);
+          const result = await this.handlerFn(processedPayload);
+
+          // NEW: If this was a request (has correlation ID), emit response
+          if (processedPayload.__correlationId) {
+            this.bus.emit(`response:${processedPayload.__correlationId}`, {
+              __correlationId: processedPayload.__correlationId,
+              response: result,
+            });
+          }
+
+          return result;
         }
 
         throw BusErrorFactory.internal(
@@ -374,6 +384,14 @@ export class ResponderBuilder<K> {
           { event: this.eventName }
         );
       } catch (error) {
+        // NEW: If this was a request that failed, emit error response
+        if (payload.__correlationId) {
+          this.bus.emit(`response:${payload.__correlationId}`, {
+            __correlationId: payload.__correlationId,
+            __error: error,
+          });
+        }
+
         // Re-throw BusErrors as-is, wrap others
         if (error instanceof BusError) {
           throw error;

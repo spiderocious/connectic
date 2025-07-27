@@ -294,6 +294,8 @@ export class RequestResponseManager {
         console.warn(
           `Responder for event "${event}" already exists. Creating new one.`
         );
+        // remove existing responder
+        this.responders.delete(event);
       }
 
       const responder = new ResponderBuilder<K>(event, this.bus);
