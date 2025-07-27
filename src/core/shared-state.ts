@@ -21,6 +21,8 @@ import {
 export class SharedStateManager {
   private states = new Map<string, SharedStateImpl<any>>();
   private isDestroyed = false;
+  private dependencyGraph = new Map<string, Set<string>>();
+  private currentAccessStack = new Set<string>();
 
   constructor(private bus: EventBus) {}
 
@@ -46,7 +48,7 @@ export class SharedStateManager {
       }
 
       // Create new state instance
-      const state = new SharedStateImpl(key, initialValue, this.bus, this);
+      const state = new SharedStateImpl(key, initialValue, this.bus, new WeakRef(this));
       this.states.set(key, state);
 
       return state;
@@ -207,6 +209,82 @@ export class SharedStateManager {
    */
   _handleStateDestroyed(key: string): void {
     this.states.delete(key);
+    this.dependencyGraph.delete(key);
+    // Remove key from all dependency sets
+    for (const deps of this.dependencyGraph.values()) {
+      deps.delete(key);
+    }
+  }
+
+  /**
+   * Tracks state access for circular dependency detection
+   * @internal
+   */
+  _trackStateAccess(sourceKey: string, targetKey: string): void {
+    if (sourceKey === targetKey) return; // Self-access is ok
+
+    // Add dependency
+    let deps = this.dependencyGraph.get(sourceKey);
+    if (!deps) {
+      deps = new Set();
+      this.dependencyGraph.set(sourceKey, deps);
+    }
+    deps.add(targetKey);
+
+    // Check for circular dependencies
+    if (this.hasCircularDependency(sourceKey, targetKey)) {
+      throw BusErrorFactory.badRequest(
+        'circularDependency',
+        `Circular dependency detected: ${sourceKey} -> ${targetKey}`,
+        { source: sourceKey, target: targetKey }
+      );
+    }
+  }
+
+  /**
+   * Detects circular dependencies using DFS
+   * @private
+   */
+  private hasCircularDependency(startKey: string, targetKey: string, visited = new Set<string>()): boolean {
+    if (visited.has(targetKey)) {
+      return targetKey === startKey;
+    }
+
+    visited.add(targetKey);
+    const deps = this.dependencyGraph.get(targetKey);
+    if (deps) {
+      for (const dep of deps) {
+        if (this.hasCircularDependency(startKey, dep, visited)) {
+          return true;
+        }
+      }
+    }
+
+    visited.delete(targetKey);
+    return false;
+  }
+
+  /**
+   * Begins tracking access for a state
+   * @internal
+   */
+  _beginStateAccess(key: string): void {
+    if (this.currentAccessStack.has(key)) {
+      throw BusErrorFactory.badRequest(
+        'circularAccess',
+        `Circular state access detected: ${key}`,
+        { key, accessStack: Array.from(this.currentAccessStack) }
+      );
+    }
+    this.currentAccessStack.add(key);
+  }
+
+  /**
+   * Ends tracking access for a state
+   * @internal
+   */
+  _endStateAccess(key: string): void {
+    this.currentAccessStack.delete(key);
   }
 
   /**
@@ -239,12 +317,14 @@ export class SharedStateImpl<T> implements SharedState<T> {
   private subscribers = new Set<(value: T) => void>();
   private isDestroyed = false;
   private unsubscribeFromBus: (() => void) | null = null;
+  private updateSequence = 0;
+  private lastRemoteSequence = -1;
 
   constructor(
     private key: string,
     initialValue: T,
     private bus: EventBus,
-    private manager: SharedStateManager
+    private managerRef: WeakRef<SharedStateManager>
   ) {
     this.value = this.cloneValue(initialValue);
     this.setupCrossAppSynchronization();
@@ -256,7 +336,25 @@ export class SharedStateImpl<T> implements SharedState<T> {
    */
   get(): T {
     this.throwIfDestroyed();
-    return this.cloneValue(this.value);
+
+    // Track access for circular dependency detection
+    const manager = this.managerRef.deref();
+    if (manager) {
+      manager._beginStateAccess(this.key);
+    }
+
+    try {
+      const trackingContext = (globalThis as any).__CONNECTIC_TRACKING_CONTEXT__;
+      if (trackingContext && trackingContext.isTracking) {
+        trackingContext.dependencies.add(this);
+      }
+
+      return this.cloneValue(this.value);
+    } finally {
+      if (manager) {
+        manager._endStateAccess(this.key);
+      }
+    }
   }
 
   /**
@@ -273,12 +371,18 @@ export class SharedStateImpl<T> implements SharedState<T> {
       // Only update if value actually changed
       if (!this.valuesEqual(oldValue, newValue)) {
         this.value = newValue;
+        this.updateSequence++;
 
         // Notify local subscribers
         this.notifySubscribers(newValue);
 
-        // Emit bus event for cross-app synchronization
-        this.bus.emit(`state:${this.key}:changed`, newValue);
+        // Emit bus event for cross-app synchronization with sequence
+        this.bus.emit(`state:${this.key}:changed`, {
+          value: newValue,
+          sequence: this.updateSequence,
+          timestamp: Date.now(),
+          source: 'local'
+        });
       }
     } catch (error) {
       throw wrapError(error, `setState:${this.key}`);
@@ -362,17 +466,46 @@ export class SharedStateImpl<T> implements SharedState<T> {
     }
 
     try {
+      try {
+        this.bus.emit(`state:${this.key}:destroyed`, { key: this.key });
+      } catch (error) {
+        console.warn(
+          `Failed to emit destruction event for state ${this.key}:`,
+          error
+        );
+      }
+
       // Unsubscribe from bus events
       if (this.unsubscribeFromBus) {
         this.unsubscribeFromBus();
         this.unsubscribeFromBus = null;
       }
 
-      // Clear all subscribers
+      // Clear all subscribers with proper error handling
+      const subscribersToNotify = Array.from(this.subscribers);
       this.subscribers.clear();
 
+      // Notify subscribers of destruction (optional - for cleanup)
+      subscribersToNotify.forEach(callback => {
+        try {
+          // Call with undefined to signal destruction
+          callback(undefined as any);
+        } catch (error) {
+          console.warn(
+            `Error notifying subscriber during state destruction:`,
+            error
+          );
+        }
+      });
+
+      // Clear value reference to help garbage collection
+      this.value = undefined as any;
+
       // Notify manager of destruction
-      this.manager._handleStateDestroyed(this.key);
+      const manager = this.managerRef.deref();
+      if (manager) {
+        manager._handleStateDestroyed(this.key);
+      }
 
       this.isDestroyed = true;
     } catch (error) {
@@ -397,10 +530,39 @@ export class SharedStateImpl<T> implements SharedState<T> {
     // Listen for state changes from other applications
     this.unsubscribeFromBus = this.bus.on(
       `state:${this.key}:changed`,
-      (newValue: T) => {
+      (changeEvent: any) => {
+        // Handle both old format (direct value) and new format (with metadata)
+        let newValue: T;
+        let sequence: number;
+        let source: string;
+
+        if (changeEvent && typeof changeEvent === 'object' && 'value' in changeEvent) {
+          // New format with metadata
+          newValue = changeEvent.value;
+          sequence = changeEvent.sequence || 0;
+          source = changeEvent.source || 'remote';
+        } else {
+          // Old format - direct value (backward compatibility)
+          newValue = changeEvent;
+          sequence = 0;
+          source = 'remote';
+        }
+
+        // Skip if this is our own update
+        if (source === 'local') {
+          return;
+        }
+
+        // Apply sequence-based conflict resolution
+        if (sequence <= this.lastRemoteSequence) {
+          // Ignore out-of-order updates
+          return;
+        }
+
         // Avoid infinite loops by checking if value actually changed
         if (!this.valuesEqual(this.value, newValue)) {
           this.value = this.cloneValue(newValue);
+          this.lastRemoteSequence = sequence;
           this.notifySubscribers(newValue);
         }
       }

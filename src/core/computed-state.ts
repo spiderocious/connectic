@@ -7,7 +7,7 @@
 
 import { BusErrorFactory, wrapError } from '../errors';
 import { ComputedState } from '../types';
-import { SharedStateImpl, SharedStateManager } from './shared-state';
+import { SharedStateImpl } from './shared-state';
 import { deepClone, estimateObjectSize, safeExecute } from './utils';
 
 /**
@@ -17,7 +17,7 @@ export class ComputedStateManager {
   private computedStates = new Set<ComputedStateImpl<any>>();
   private isDestroyed = false;
 
-  constructor(private stateManager: SharedStateManager) {}
+  constructor() {}
 
   /**
    * Creates a new computed state instance
@@ -38,8 +38,7 @@ export class ComputedStateManager {
 
       const computed = new ComputedStateImpl(
         computeFn,
-        this.stateManager,
-        this
+        new WeakRef(this)
       );
       this.computedStates.add(computed);
 
@@ -156,8 +155,7 @@ export class ComputedStateImpl<T> implements ComputedState<T> {
 
   constructor(
     private computeFn: () => T,
-    private stateManager: SharedStateManager,
-    private manager: ComputedStateManager
+    private managerRef: WeakRef<ComputedStateManager>
   ) {
     // Initial computation to establish dependencies
     this.get();
@@ -261,7 +259,10 @@ export class ComputedStateImpl<T> implements ComputedState<T> {
       this.cachedValue = undefined;
 
       // Notify manager of destruction
-      this.manager._handleComputedDestroyed(this);
+      const manager = this.managerRef.deref();
+      if (manager) {
+        manager._handleComputedDestroyed(this);
+      }
 
       this.isDestroyed = true;
     } catch (error) {
@@ -324,31 +325,18 @@ export class ComputedStateImpl<T> implements ComputedState<T> {
     const oldDependencies = new Set(this.dependencies);
     const newDependencies = new Set<SharedStateImpl<any>>();
 
-    // Set up dependency tracking
-    const originalGetState = this.stateManager.getState.bind(this.stateManager);
-    const originalGetStateValue = this.stateManager.getStateValue.bind(
-      this.stateManager
-    );
-
-    // Override state access methods to track dependencies
-    this.stateManager.getState = <U>(key: string) => {
-      const state = originalGetState<U>(key);
-      if (state && state instanceof SharedStateImpl) {
-        newDependencies.add(state as any);
-      }
-      return state;
+    // Create a tracking context
+    const trackingContext = {
+      isTracking: true,
+      dependencies: newDependencies
     };
 
-    this.stateManager.getStateValue = <U>(key: string) => {
-      const state = originalGetState<U>(key);
-      if (state && state instanceof SharedStateImpl) {
-        newDependencies.add(state as any);
-      }
-      return originalGetStateValue<U>(key);
-    };
+    // Use a global tracking context instead of method overriding
+    const previousContext = (globalThis as any).__CONNECTIC_TRACKING_CONTEXT__;
+    (globalThis as any).__CONNECTIC_TRACKING_CONTEXT__ = trackingContext;
 
     try {
-      // Execute computation with dependency tracking
+      // Execute computation with tracking active
       const result = this.computeFn();
 
       // Update dependencies
@@ -356,9 +344,8 @@ export class ComputedStateImpl<T> implements ComputedState<T> {
 
       return result;
     } finally {
-      // Restore original methods
-      this.stateManager.getState = originalGetState;
-      this.stateManager.getStateValue = originalGetStateValue;
+      // Always restore previous context
+      (globalThis as any).__CONNECTIC_TRACKING_CONTEXT__ = previousContext;
     }
   }
 

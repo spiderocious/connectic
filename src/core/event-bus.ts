@@ -105,21 +105,38 @@ export class EventBus {
     this.throwIfDestroyed();
 
     let unsubscribed = false;
+    let internalUnsubscribe: (() => void) | null = null;
 
     const onceHandler = (payload: any) => {
       if (unsubscribed) return;
-
+      
+      // Immediately unsubscribe to prevent multiple calls
       unsubscribed = true;
-      unsubscribe();
-      handler(payload);
+      if (internalUnsubscribe) {
+        internalUnsubscribe();
+        internalUnsubscribe = null;
+      }
+      
+      // Call the original handler
+      try {
+        handler(payload);
+      } catch (error) {
+        console.error(`Error in once handler for ${event}:`, error);
+      }
     };
 
-    const unsubscribe = this.on(event, onceHandler);
+    // Set up the subscription and store the unsubscribe function
+    internalUnsubscribe = this.on(event, onceHandler);
 
-    // Return unsubscribe function that prevents execution
+    // Return unsubscribe function that prevents execution and cleans up
     return () => {
-      unsubscribed = true;
-      unsubscribe();
+      if (!unsubscribed) {
+        unsubscribed = true;
+        if (internalUnsubscribe) {
+          internalUnsubscribe();
+          internalUnsubscribe = null;
+        }
+      }
     };
   }
 
@@ -367,7 +384,7 @@ export class NamespacedEventBus {
     private eventBus: EventBus,
     private namespace: string
   ) {}
-
+  isDestroyed = false;
   /**
    * Emits a namespaced event
    * @param event Event name (will be prefixed with namespace)
@@ -393,9 +410,44 @@ export class NamespacedEventBus {
    * @param handler Event handler
    * @returns Unsubscribe function
    */
-  once(event: string, handler: Function): () => void {
-    return this.eventBus.once(`${this.namespace}:${event}`, handler);
-  }
+once(event: string, handler: Function): () => void {
+  this.throwIfDestroyed();
+
+  let unsubscribed = false;
+  let internalUnsubscribe: (() => void) | null = null;
+
+  const onceHandler = (payload: any) => {
+    if (unsubscribed) return;
+    
+    // Immediately unsubscribe to prevent multiple calls
+    unsubscribed = true;
+    if (internalUnsubscribe) {
+      internalUnsubscribe();
+      internalUnsubscribe = null;
+    }
+    
+    // Call the original handler
+    try {
+      handler(payload);
+    } catch (error) {
+      console.error(`Error in once handler for ${event}:`, error);
+    }
+  };
+
+  // Set up the subscription and store the unsubscribe function
+  internalUnsubscribe = this.on(event, onceHandler);
+
+  // Return unsubscribe function that prevents execution and cleans up
+  return () => {
+    if (!unsubscribed) {
+      unsubscribed = true;
+      if (internalUnsubscribe) {
+        internalUnsubscribe();
+        internalUnsubscribe = null;
+      }
+    }
+  };
+}
 
   /**
    * Removes a specific handler from a namespaced event
@@ -463,6 +515,12 @@ export class NamespacedEventBus {
     return this.namespace;
   }
 
+  private throwIfDestroyed(): void {
+    if (this.isDestroyed) {
+      throw BusErrorFactory.gone('event-bus', 'Event bus has been destroyed');
+    }
+  }
+
   /**
    * Creates a sub-namespace
    * @param subNamespace Sub-namespace name
@@ -476,6 +534,7 @@ export class NamespacedEventBus {
    * Destroys this namespaced view (removes all listeners in namespace)
    */
   destroy(): void {
+    this.isDestroyed = true;
     this.removeAllListeners();
   }
 }

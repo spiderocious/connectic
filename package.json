@@ -1,6 +1,6 @@
 {
   "name": "connectic",
-  "version": "1.0.0",
+  "version": "2.0.0",
   "description": "Connectic is a javascript library for pub sub messaging, event handling, and data synchronization in real-time applications.",
   "main": "dist/index.js",
   "module": "dist/index.mjs",

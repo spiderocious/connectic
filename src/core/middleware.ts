@@ -5,7 +5,8 @@
  * It provides lifecycle hooks and extensible middleware chains for responders.
  */
 
-import { BusError, BusErrorFactory, wrapError } from '../errors';
+import { MFEBus } from '..';
+import { BusError, BusErrorCode, BusErrorFactory, wrapError } from '../errors';
 import { BusPlugin, HookHandler, HookType, MiddlewareFunction } from '../types';
 import { EventBus } from './event-bus';
 import { safeExecute } from './utils';
@@ -14,16 +15,12 @@ import { safeExecute } from './utils';
  * Manages plugins and lifecycle hooks for a bus instance
  */
 export class MiddlewareManager {
-  private hooks: Record<HookType, HookHandler[]> = {
-    beforeEmit: [],
-    afterEmit: [],
-    beforeOn: [],
-    afterOn: [],
-  };
-  private plugins: BusPlugin[] = [];
+  private hooks = new Map<HookType, HookHandler[]>();
   private isDestroyed = false;
+  private plugins: BusPlugin[] = [];
+  private pluginDependencies = new Map<string, string[]>();
 
-  constructor(private bus: any) {} // Bus reference for plugin installation
+  constructor(private bus: MFEBus<any, any>) {} // Bus reference for plugin installation
 
   /**
    * Adds a plugin to the bus
@@ -63,6 +60,21 @@ export class MiddlewareManager {
         throw BusErrorFactory.conflict('addPlugin', 1, {
           message: `Plugin "${plugin.name}" is already installed`,
         });
+      }
+
+      // Check and store dependencies
+      const dependencies = this.getPluginDependencies(plugin);
+      this.pluginDependencies.set(plugin.name, dependencies);
+
+      // Validate dependencies exist
+      for (const dep of dependencies) {
+        if (!this.hasPlugin(dep)) {
+          throw BusErrorFactory.badRequest(
+            'addPlugin',
+            `Plugin "${plugin.name}" depends on "${dep}" which is not installed`,
+            { plugin: plugin.name, missingDependency: dep }
+          );
+        }
       }
 
       // Install the plugin
@@ -124,6 +136,18 @@ export class MiddlewareManager {
   }
 
   /**
+   * Gets plugin dependencies
+   * @private
+   */
+  private getPluginDependencies(plugin: BusPlugin): string[] {
+    // Check if plugin has dependency information
+    if ('dependencies' in plugin && Array.isArray((plugin as any).dependencies)) {
+      return (plugin as any).dependencies;
+    }
+    return [];
+  }
+
+  /**
    * Adds a lifecycle hook
    * @param type Hook type
    * @param handler Hook handler function
@@ -132,12 +156,8 @@ export class MiddlewareManager {
     this.throwIfDestroyed();
 
     try {
-      if (!this.hooks[type]) {
-        throw BusErrorFactory.badRequest(
-          'addHook',
-          `Invalid hook type: ${type}`,
-          { type, validTypes: Object.keys(this.hooks) }
-        );
+      if (!this.hooks.has(type)) {
+        this.hooks.set(type, []);
       }
 
       if (typeof handler !== 'function') {
@@ -148,7 +168,9 @@ export class MiddlewareManager {
         );
       }
 
-      this.hooks[type].push(handler);
+      const handlers = this.hooks.get(type) || [];
+      handlers.push(handler);
+      this.hooks.set(type, handlers);
     } catch (error) {
       throw wrapError(error, `addHook:${type}`);
     }
@@ -163,19 +185,16 @@ export class MiddlewareManager {
     this.throwIfDestroyed();
 
     try {
-      if (!this.hooks[type]) {
-        throw BusErrorFactory.badRequest(
-          'removeHook',
-          `Invalid hook type: ${type}`,
-          { type, validTypes: Object.keys(this.hooks) }
-        );
+      const hooks = this.hooks.get(type);
+      if (!hooks) {
+        return;
       }
 
-      const hooks = this.hooks[type];
       const index = hooks.indexOf(handler);
 
       if (index > -1) {
         hooks.splice(index, 1);
+        this.hooks.set(type, hooks);
       }
     } catch (error) {
       throw wrapError(error, `removeHook:${type}`);
@@ -192,12 +211,12 @@ export class MiddlewareManager {
     this.throwIfDestroyed();
 
     try {
-      const hooks = this.hooks[type];
+      const hooks = this.hooks.get(type);
       if (!hooks || hooks.length === 0) {
         return;
       }
 
-      hooks.forEach((hook, index) => {
+      hooks.forEach((hook: HookHandler, index: number) => {
         safeExecute(
           () => hook(event, payload),
           `${type} hook #${index} for event '${event}'`
@@ -217,12 +236,12 @@ export class MiddlewareManager {
       pluginCount: this.plugins.length,
       plugins: this.plugins.map(p => p.name),
       hookCounts: {
-        beforeEmit: this.hooks.beforeEmit.length,
-        afterEmit: this.hooks.afterEmit.length,
-        beforeOn: this.hooks.beforeOn.length,
-        afterOn: this.hooks.afterOn.length,
+        beforeEmit: (this.hooks.get('beforeEmit') || []).length,
+        afterEmit: (this.hooks.get('afterEmit') || []).length,
+        beforeOn: (this.hooks.get('beforeOn') || []).length,
+        afterOn: (this.hooks.get('afterOn') || []).length,
       },
-      totalHooks: Object.values(this.hooks).reduce(
+      totalHooks: Array.from(this.hooks.values()).reduce(
         (sum, hooks) => sum + hooks.length,
         0
       ),
@@ -239,8 +258,10 @@ export class MiddlewareManager {
     }
 
     try {
-      // Uninstall all plugins
-      [...this.plugins].forEach(plugin => {
+      // Uninstall plugins in reverse dependency order
+      const uninstallOrder = this.calculateDestructionOrder();
+      
+      uninstallOrder.forEach(plugin => {
         try {
           if (typeof plugin.uninstall === 'function') {
             plugin.uninstall(this.bus);
@@ -254,16 +275,59 @@ export class MiddlewareManager {
       });
 
       // Clear all hooks and plugins
-      Object.keys(this.hooks).forEach(key => {
-        this.hooks[key as HookType] = [];
-      });
+      this.hooks.clear();
       this.plugins = [];
+      this.pluginDependencies.clear();
 
       this.isDestroyed = true;
     } catch (error) {
       this.isDestroyed = true;
       throw wrapError(error, 'middleware.destroy');
     }
+  }
+
+  /**
+   * Calculates destruction order for plugins
+   * @private
+   */
+  private calculateDestructionOrder(): BusPlugin[] {
+    const result: BusPlugin[] = [];
+    const visited = new Set<string>();
+    const visiting = new Set<string>();
+
+    const visit = (pluginName: string) => {
+      if (visited.has(pluginName)) return;
+      if (visiting.has(pluginName)) {
+        // Circular dependency - just add to result
+        return;
+      }
+
+      visiting.add(pluginName);
+      
+      // Visit all plugins that depend on this one (reverse dependencies)
+      this.plugins.forEach(plugin => {
+        const deps = this.pluginDependencies.get(plugin.name) || [];
+        if (deps.includes(pluginName) && !visited.has(plugin.name)) {
+          visit(plugin.name);
+        }
+      });
+
+      visiting.delete(pluginName);
+      visited.add(pluginName);
+      
+      // Add the plugin itself
+      const plugin = this.plugins.find(p => p.name === pluginName);
+      if (plugin) {
+        result.push(plugin);
+      }
+    };
+
+    // Visit all plugins
+    this.plugins.forEach(plugin => {
+      visit(plugin.name);
+    });
+
+    return result;
   }
 
   /**
@@ -418,10 +482,19 @@ export class ResponderBuilder<K> {
     let currentPayload = payload;
     let cancelled = false;
     let cancelReason: string | undefined;
+    const executionContext = {
+      startTime: Date.now(),
+      executedMiddleware: [] as number[],
+    };
 
     for (let i = 0; i < this.middlewares.length; i++) {
+      if (cancelled) {
+        break; 
+      }
+
       const middleware = this.middlewares[i];
       let nextCalled = false;
+      let middlewareError: Error | null = null;
 
       try {
         await new Promise<void>((resolve, reject) => {
@@ -430,8 +503,12 @@ export class ResponderBuilder<K> {
               reject(
                 new BusError(
                   'next() called multiple times in middleware',
-                  429,
-                  { event: this.eventName, middlewareIndex: i }
+                  BusErrorCode.TOO_MANY_REQUESTS,
+                  {
+                    event: this.eventName,
+                    middlewareIndex: i,
+                    executionContext,
+                  }
                 )
               );
               return;
@@ -443,24 +520,43 @@ export class ResponderBuilder<K> {
           const cancel = (reason?: string) => {
             cancelled = true;
             cancelReason = reason;
+            nextCalled = true; // Prevent "next() not called" error
             resolve(); // Resolve to exit the chain gracefully
           };
 
-          // Execute middleware
-          const result = middleware(currentPayload, next, cancel);
+          try {
+            // Execute middleware with timeout protection
+            const middlewarePromise = Promise.resolve(
+              middleware(currentPayload, next, cancel)
+            );
 
-          // Handle async middleware
-          if (result && typeof result.then === 'function') {
-            result.catch(reject);
+            // Add timeout to prevent hanging middleware
+            const timeoutPromise = new Promise<void>((_, timeoutReject) => {
+              setTimeout(() => {
+                timeoutReject(
+                  new BusError(`Middleware timeout after 30 seconds`, 408, {
+                    event: this.eventName,
+                    middlewareIndex: i,
+                  })
+                );
+              }, 30000);
+            });
+
+            Promise.race([middlewarePromise, timeoutPromise]).catch(reject);
+          } catch (syncError) {
+            reject(syncError);
           }
         });
+
+        // Track successful execution
+        executionContext.executedMiddleware.push(i);
 
         // Check if middleware cancelled the chain
         if (cancelled) {
           throw BusErrorFactory.forbidden(
             this.eventName,
             cancelReason || 'Request cancelled by middleware',
-            { middlewareIndex: i }
+            { middlewareIndex: i, executionContext }
           );
         }
 
@@ -469,11 +565,21 @@ export class ResponderBuilder<K> {
           throw BusErrorFactory.forbidden(
             this.eventName,
             'Middleware did not call next() or cancel()',
-            { middlewareIndex: i }
+            { middlewareIndex: i, executionContext }
           );
         }
       } catch (error) {
-        throw wrapError(error, `${this.eventName}:middleware:${i}`);
+        middlewareError =
+          error instanceof Error ? error : new Error(String(error));
+
+        // Continue with cleanup even if this middleware failed
+        console.warn(
+          `Middleware ${i} failed for event ${this.eventName}:`,
+          middlewareError.message
+        );
+
+        // Re-throw with context
+        throw wrapError(middlewareError, `${this.eventName}:middleware:${i}`);
       }
     }
 

@@ -291,19 +291,34 @@ export function hasBusErrorCode(error: any, code: BusErrorCode): error is BusErr
  * Utility function to wrap unknown errors as BusError
  */
 export function wrapError(error: unknown, event?: string): BusError {
+  // Don't double-wrap BusErrors - preserve original error with context
   if (isBusError(error)) {
-    return error
+    // If it's already a BusError, just add context if missing
+    if (event && !error.details?.event) {
+      return new BusError(
+        error.message,
+        error.busCode,
+        { ...error.details, event, wrappedFrom: event }
+      );
+    }
+    return error;
   }
 
   if (error instanceof Error) {
-    return BusErrorFactory.internal(error.message, error, { event })
+    // Preserve original stack trace by not creating a new Error
+    const busError = BusErrorFactory.internal(error.message, error, { event });
+    // Preserve the original stack trace
+    if (error.stack) {
+      busError.stack = error.stack;
+    }
+    return busError;
   }
 
   return BusErrorFactory.internal(
     `Unknown error: ${String(error)}`,
     undefined,
     { event, originalError: error }
-  )
+  );
 }
 
 /**

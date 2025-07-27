@@ -450,9 +450,24 @@ export class RequestResponseManager {
       const timeoutId = setTimeout(() => {
         if (!resolved) {
           resolved = true;
-          cleanup();
+          
+          // Ensure complete cleanup before rejecting
+          try {
+            cleanup();
+          } catch (cleanupError) {
+            console.warn(`Cleanup error during timeout for ${event}:`, cleanupError);
+          }
+          
           this.stats.timeoutRequests++;
-          reject(BusErrorFactory.timeout(event, options.timeout));
+          
+          // Create detailed timeout error
+          const timeoutError = BusErrorFactory.timeout(event, options.timeout, {
+            correlationId,
+            pendingRequests: this.pendingRequests.size,
+            totalRequests: this.stats.totalRequests
+          });
+          
+          reject(timeoutError);
         }
       }, options.timeout);
 
@@ -489,12 +504,34 @@ export class RequestResponseManager {
       };
 
       const cleanup = () => {
-        clearTimeout(timeoutId);
-        if (options.signal) {
-          options.signal.removeEventListener('abort', onAbort);
+        try {
+          clearTimeout(timeoutId);
+          
+          if (options.signal) {
+            try {
+              options.signal.removeEventListener('abort', onAbort);
+            } catch (error) {
+              console.warn('Error removing abort listener:', error);
+            }
+          }
+          
+          try {
+            this.bus.off(`response:${correlationId}`, responseHandler);
+          } catch (error) {
+            console.warn('Error removing response listener:', error);
+          }
+          
+          // Always remove from pending requests, even if other cleanup fails
+          this.pendingRequests.delete(correlationId);
+        } catch (error) {
+          console.warn(`Complete cleanup failed for request ${correlationId}:`, error);
+          // Force removal from pending requests as last resort
+          try {
+            this.pendingRequests.delete(correlationId);
+          } catch (finalError) {
+            console.error('Critical: Failed to remove pending request:', finalError);
+          }
         }
-        this.bus.off(`response:${correlationId}`, responseHandler);
-        this.pendingRequests.delete(correlationId);
       };
 
       // Store pending request info

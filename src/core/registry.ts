@@ -36,18 +36,48 @@ export class BusRegistry {
       return;
     }
 
+    // Use atomic check-and-set pattern
+    const INIT_KEY = 'CONNECTIC_INITIALIZING';
+    const INSTANCES_KEY = 'CONNECTIC_INSTANCES';
+
     try {
-      // Attempt to use global store for cross-app sharing
       const globalStore = getGlobalStore();
 
-      // Check if another instance of connectic already exists
-      if (globalStore.has('CONNECTIC_INSTANCES')) {
-        this.instances = globalStore.get('CONNECTIC_INSTANCES');
-      } else {
-        globalStore.set('CONNECTIC_INSTANCES', this.instances);
+      // Atomic initialization check
+      if (globalStore.has(INIT_KEY)) {
+        let attempts = 0;
+        while (globalStore.has(INIT_KEY) && attempts < 100) {
+          // Busy wait with backoff (max 1 second total)
+          const delay = Math.min(attempts * 10, 100);
+          // Use synchronous delay for initialization
+          const start = Date.now();
+          while (Date.now() - start < delay) {
+            /* busy wait */
+          }
+          attempts++;
+        }
+
+        if (globalStore.has(INIT_KEY)) {
+          throw new Error('Registry initialization deadlock detected');
+        }
       }
 
-      this.isInitialized = true;
+      // Set initialization lock
+      globalStore.set(INIT_KEY, true);
+
+      try {
+        // Check if another instance already exists
+        if (globalStore.has(INSTANCES_KEY)) {
+          this.instances = globalStore.get(INSTANCES_KEY);
+        } else {
+          globalStore.set(INSTANCES_KEY, this.instances);
+        }
+
+        this.isInitialized = true;
+      } finally {
+        // Always remove initialization lock
+        globalStore.delete(INIT_KEY);
+      }
     } catch (error) {
       // Fall back to module-level storage if global storage fails
       console.warn(

@@ -5,9 +5,9 @@
  * data flowing through the bus system.
  */
 
-import { BusErrorFactory, wrapError } from '../errors';
+import { BusError, BusErrorFactory, wrapError, BusErrorCode } from '../errors';
 import { RequestInterceptor, ResponseInterceptor } from '../types';
-import { deepClone, safeExecute } from './utils';
+import { deepClone } from './utils';
 
 /**
  * Manages request and response interceptors
@@ -22,6 +22,10 @@ export class InterceptorManager {
     requestErrors: 0,
     responseErrors: 0,
   };
+
+  constructor() {
+    // Ready for interceptor management
+  }
 
   /**
    * Adds a request interceptor
@@ -122,23 +126,48 @@ export class InterceptorManager {
       }
 
       let transformedPayload = deepClone(payload);
+      const errors: Array<{ index: number; error: any }> = [];
 
       for (let i = 0; i < this.requestInterceptors.length; i++) {
         const interceptor = this.requestInterceptors[i];
 
-        const result = safeExecute(
-          () => interceptor(event, transformedPayload),
-          `request interceptor #${i} for event '${event}'`
-        );
-
-        if (result !== undefined) {
-          transformedPayload = result;
+        try {
+          const result = interceptor(event, transformedPayload);
+          
+          if (result !== undefined) {
+            transformedPayload = result;
+          }
+        } catch (error) {
+          // Log the error but continue with other interceptors
+          console.warn(
+            `Request interceptor #${i} failed for event '${event}':`,
+            error
+          );
+          
+          errors.push({ index: i, error });
+          this.stats.requestErrors++;
+          
+          // Continue with the next interceptor
+          continue;
         }
       }
 
       this.stats.requestInterceptions++;
+
+      // If there were critical errors (more than 50% failed), throw
+      if (errors.length > this.requestInterceptors.length / 2) {
+        throw new BusError(
+          `Too many request interceptor failures (${errors.length}/${this.requestInterceptors.length})`,
+          500,
+          { event, errors: errors.slice(0, 3) } // Only include first 3 errors to avoid huge objects
+        );
+      }
+
       return transformedPayload;
     } catch (error) {
+      if (error instanceof BusError) {
+        throw error;
+      }
       this.stats.requestErrors++;
       throw wrapError(error, `applyRequestInterceptors:${event}`);
     }
@@ -159,17 +188,25 @@ export class InterceptorManager {
       }
 
       let transformedResponse = deepClone(response);
+      const errors: Error[] = [];
 
       for (let i = 0; i < this.responseInterceptors.length; i++) {
         const interceptor = this.responseInterceptors[i];
 
-        const result = safeExecute(
-          () => interceptor(event, transformedResponse),
-          `response interceptor #${i} for event '${event}'`
-        );
+        try {
+          const result = interceptor(event, transformedResponse);
 
-        if (result !== undefined) {
-          transformedResponse = result;
+          if (result !== undefined) {
+            transformedResponse = result;
+          }
+        } catch (error) {
+          errors.push(error as Error);
+          console.warn(`Response interceptor #${i} failed:`, error);
+          
+          // If more than 50% of interceptors fail, throw
+          if (errors.length / this.responseInterceptors.length > 0.5) {
+            throw new BusError('Too many response interceptor failures', BusErrorCode.INTERNAL_ERROR, { errors });
+          }
         }
       }
 

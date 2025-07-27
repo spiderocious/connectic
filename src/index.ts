@@ -51,6 +51,7 @@ export class MFEBus<
   private interceptorManager: InterceptorManager
   private config: BusConfig
   private namespacePath: string
+  private namespacedEventCache = new Map<string, string>();
   private isDestroyed = false
 
   constructor(config: BusConfig, namespacePath: string = '') {
@@ -62,7 +63,7 @@ export class MFEBus<
       this.eventBus = new EventBus()
       this.middleware = new MiddlewareManager(this)
       this.stateManager = new SharedStateManager(this.eventBus)
-      this.computedManager = new ComputedStateManager(this.stateManager)
+      this.computedManager = new ComputedStateManager()
       this.cacheManager = new CacheManager(config.cache)
       this.requestManager = new RequestResponseManager(this.eventBus, this.cacheManager)
       this.interceptorManager = new InterceptorManager()
@@ -480,6 +481,7 @@ export class MFEBus<
       this.middleware.destroy()
       this.eventBus.destroy()
       
+      this.namespacedEventCache.clear();
       this.isDestroyed = true
 
     } catch (error) {
@@ -529,7 +531,28 @@ export class MFEBus<
    * @private
    */
   private namespacedEvent(event: string): string {
-    return this.namespacePath ? `${this.namespacePath}:${event}` : event
+    if (!this.namespacePath) {
+      return event;
+    }
+
+    // Use cache for performance optimization
+    let namespacedEvent = this.namespacedEventCache.get(event);
+    if (namespacedEvent === undefined) {
+      namespacedEvent = `${this.namespacePath}:${event}`;
+      
+      // Prevent cache from growing too large
+      if (this.namespacedEventCache.size > 1000) {
+        // Clear oldest entries (simple LRU simulation)
+        const firstKey = this.namespacedEventCache.keys().next().value;
+        if (firstKey) {
+          this.namespacedEventCache.delete(firstKey);
+        }
+      }
+      
+      this.namespacedEventCache.set(event, namespacedEvent);
+    }
+    
+    return namespacedEvent;
   }
 
   /**

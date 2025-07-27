@@ -16,6 +16,8 @@ export class CacheManager {
   private cache = new Map<string, CacheEntry>();
   private config: Required<CacheConfig>;
   private cleanupTimer: NodeJS.Timeout | undefined;
+  private accessOrder = new Map<string, number>();
+  private accessCounter = 0; 
   private stats = {
     hits: 0,
     misses: 0,
@@ -60,6 +62,9 @@ export class CacheManager {
 
       // Update last accessed time for LRU
       entry.lastAccessed = Date.now();
+      // Move to end of Map for O(1) LRU tracking (re-insert for recency)
+      this.accessOrder.delete(key);
+      this.accessOrder.set(key, ++this.accessCounter);
       this.stats.hits++;
 
       return deepClone(entry.value);
@@ -94,6 +99,9 @@ export class CacheManager {
       }
 
       this.cache.set(key, entry);
+      // Move to end of Map for O(1) LRU tracking (re-insert for recency)
+      this.accessOrder.delete(key);
+      this.accessOrder.set(key, ++this.accessCounter);
       this.stats.sets++;
     } catch (error) {
       throw wrapError(error, `cache.set:${key}`);
@@ -386,18 +394,14 @@ export class CacheManager {
    * @private
    */
   private evictLRU(): void {
-    let oldestKey: string | null = null;
-    let oldestTime = Date.now();
+    if (this.accessOrder.size === 0) return;
 
-    for (const [key, entry] of this.cache.entries()) {
-      if (entry.lastAccessed < oldestTime) {
-        oldestTime = entry.lastAccessed;
-        oldestKey = key;
-      }
-    }
-
-    if (oldestKey) {
+    // Get the first (oldest) entry from accessOrder Map
+    const oldestKey = this.accessOrder.keys().next().value;
+    
+    if (oldestKey && this.cache.has(oldestKey)) {
       this.cache.delete(oldestKey);
+      this.accessOrder.delete(oldestKey);
       this.stats.evictions++;
     }
   }
