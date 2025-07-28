@@ -184,6 +184,8 @@ export interface ResponderBuilder<K> {
   use(middleware: MiddlewareFunction): ResponderBuilder<K>
   /** Set the final handler function */
   handler(handlerFn: (payload: any) => any | Promise<any>): void
+  /** Destroy the responder and clean up event listeners */
+  destroy?(): void
 }
 
 /**

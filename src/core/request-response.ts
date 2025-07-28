@@ -289,12 +289,30 @@ export class RequestResponseManager {
     try {
       validateParameters(event);
 
-      // Check if responder already exists
+      // Check if responder already exists and clean it up properly
       if (this.responders.has(event)) {
+        const existingResponder = this.responders.get(event);
+
         console.warn(
-          `Responder for event "${event}" already exists. Creating new one.`
+          `Responder for event "${event}" already exists. Replacing with new responder.`
         );
-        // remove existing responder
+
+        // Properly destroy the existing responder to clean up event listeners
+        if (
+          existingResponder &&
+          typeof existingResponder.destroy === 'function'
+        ) {
+          try {
+            existingResponder.destroy();
+          } catch (error) {
+            console.warn(
+              `Error destroying existing responder for "${event}":`,
+              error
+            );
+          }
+        }
+
+        // Remove existing responder from registry
         this.responders.delete(event);
       }
 

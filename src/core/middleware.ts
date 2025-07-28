@@ -362,6 +362,7 @@ export class ResponderBuilder<K> {
   private middlewares: MiddlewareFunction[] = [];
   private handlerFn: ((payload: any) => any | Promise<any>) | null = null;
   private isInstalled = false;
+  private composedHandler: ((payload: any) => any | Promise<any>) | null = null;
 
   constructor(
     private eventName: string,
@@ -420,6 +421,28 @@ export class ResponderBuilder<K> {
     this.isInstalled = true;
   }
 
+  destroy(): void {
+    if (!this.isInstalled) {
+      throw BusErrorFactory.badRequest(
+        'responder.destroy',
+        'Responder has not been installed yet',
+        { event: this.eventName }
+      );
+    }
+    if (!this.composedHandler) {
+      console.warn(
+        `Responder for event "${this.eventName}" has no composed handler to destroy`
+      );
+      return;
+    }
+    // Remove the actual event listener from the bus
+    this.bus.off(this.eventName, this.composedHandler);
+    this.isInstalled = false;
+    this.middlewares = [];
+    this.handlerFn = null;
+    this.composedHandler = null;
+  }
+
   /**
    * Installs the responder with middleware chain on the bus
    * @private
@@ -466,6 +489,9 @@ export class ResponderBuilder<K> {
         throw wrapError(error, this.eventName);
       }
     };
+
+    // Store reference to the composed handler for later cleanup
+    this.composedHandler = composedHandler;
 
     // Install the composed handler on the bus
     this.bus.on(this.eventName, composedHandler);

@@ -175,6 +175,69 @@ function useAppState() {
 
 ## 🔧 Advanced Features
 
+### Built-in Plugins
+
+Connectic comes with powerful built-in plugins for common use cases:
+
+#### Logger Plugin
+
+```typescript
+import { createBus, Plugins } from 'connectic'
+
+const bus = createBus({ name: 'app' })
+
+// Enable comprehensive logging
+bus.use(new Plugins.Logger({
+  logEmits: true,       // Log event emissions
+  logRequests: true,    // Log request/response requests
+  logResponses: true,   // Log request/response responses
+  prefix: '[MyApp]'     // Custom log prefix
+}))
+
+// Selective logging
+bus.use(new Plugins.Logger({
+  logEmits: false,      // Only log requests/responses
+  logRequests: true,
+  logResponses: true,
+  prefix: '[API]'
+}))
+```
+
+#### Validator Plugin
+
+```typescript
+// Schema-based request validation
+bus.use(new Plugins.Validator({
+  'user:create': (payload) => {
+    if (!payload.email) return 'Email is required'
+    if (!payload.name) return 'Name is required'
+    return true // Valid
+  },
+  'user:update': (payload) => {
+    return payload.id ? true : 'User ID is required'
+  }
+}))
+
+// Requests are automatically validated
+try {
+  await bus.request('user:create', { name: 'John' }) // Throws validation error
+} catch (error) {
+  console.log(error.message) // "Email is required"
+}
+```
+
+#### Rate Limiting Plugin
+
+```typescript
+// Limit requests per event
+bus.use(new Plugins.RateLimit(
+  10,     // Max 10 requests
+  60000   // Per 60 seconds
+))
+
+// Requests exceeding limit throw BusError with code 429
+```
+
 ### Middleware System
 
 ```typescript
@@ -192,6 +255,26 @@ const bus = createBus({
     }
   ]
 })
+
+// Add middleware at runtime
+bus.addHook('beforeEmit', (event, payload) => {
+  console.log(`Emitting ${event}`, payload)
+})
+
+bus.addHook('afterEmit', (event, payload) => {
+  console.log(`Emitted ${event}`)
+})
+```
+
+### Built-in Middleware
+
+```typescript
+import { BuiltinMiddleware } from 'connectic'
+
+// Pre-built middleware for common tasks
+bus.use(BuiltinMiddleware.createLogger({ prefix: '[CUSTOM]' }))
+bus.use(BuiltinMiddleware.createValidator(schemas))
+bus.use(BuiltinMiddleware.createRateLimit(5, 10000))
 ```
 
 ### Plugin Architecture
@@ -213,6 +296,98 @@ const analyticsPlugin = {
 bus.use(analyticsPlugin)
 ```
 
+### Request/Response Interceptors
+
+Transform request and response data with powerful interceptor system:
+
+```typescript
+// Request interceptors - transform outgoing requests
+bus.interceptRequest((event, payload) => {
+  return {
+    ...payload,
+    timestamp: Date.now(),
+    requestId: generateId()
+  }
+})
+
+// Response interceptors - transform incoming responses
+bus.interceptResponse((event, response) => {
+  return {
+    data: response,
+    receivedAt: Date.now(),
+    event
+  }
+})
+```
+
+### Built-in Interceptors
+
+```typescript
+import { BuiltinInterceptors } from 'connectic'
+
+// Add timestamp to all requests
+bus.interceptRequest(BuiltinInterceptors.addTimestamp())
+
+// Validate responses
+bus.interceptResponse(BuiltinInterceptors.validateResponse((event, response) => {
+  return response && response.success === true
+}))
+
+// Transform response format
+bus.interceptResponse(BuiltinInterceptors.normalizeResponse({
+  dataField: 'data',
+  errorField: 'error',
+  successField: 'success'
+}))
+
+// Filter sensitive data from requests
+bus.interceptRequest(BuiltinInterceptors.filterSensitiveData(['password', 'token']))
+
+// Add performance tracking
+bus.interceptResponse(BuiltinInterceptors.addPerformanceMetrics((event, start, end) => {
+  console.log(`${event} took ${end - start}ms`)
+}))
+
+// Rate limiting
+bus.interceptRequest(BuiltinInterceptors.rateLimit(10, 60000))
+
+// Circuit breaker pattern
+bus.interceptRequest(BuiltinInterceptors.circuitBreaker(5, 30000))
+```
+
+### Interceptor Utils
+
+```typescript
+import { InterceptorUtils } from 'connectic'
+
+// Combine multiple interceptors
+const combinedInterceptor = InterceptorUtils.combineRequestInterceptors([
+  InterceptorUtils.addTimestamp(),
+  InterceptorUtils.addRequestId(),
+  InterceptorUtils.addAuthentication(() => getAuthToken())
+])
+
+bus.interceptRequest(combinedInterceptor)
+
+// Conditional interceptors
+bus.interceptRequest(
+  InterceptorUtils.conditionalRequest(
+    /^user:/, // Only for user events
+    InterceptorUtils.validateRequest(userValidator)
+  )
+)
+
+// One-time interceptor
+bus.interceptRequest(
+  InterceptorUtils.once(InterceptorUtils.addTimestamp())
+)
+
+// Debounced interceptor
+bus.interceptResponse(
+  InterceptorUtils.debounce(logResponse, 1000)
+)
+```
+
 ### Caching & Performance
 
 ```typescript
@@ -231,6 +406,41 @@ const userAgain = await bus.request('get:user', { id: '123' }) // Returns from c
 // Manual cache control
 bus.cache.invalidate('get:user:123')
 bus.cache.invalidatePattern('get:user:*')
+bus.cache.clear()
+
+// Cache utilities
+import { CacheUtils } from 'connectic'
+
+// Custom cache strategies
+CacheUtils.createStrategy('LRU', { maxSize: 100 })
+CacheUtils.createStrategy('TTL', { defaultTtl: 60000 })
+```
+
+### Advanced Request Methods
+
+```typescript
+// Request with multiple responders
+const responses = await bus.requestMany('search:products', 
+  { query: 'laptop' },
+  { 
+    maxResponders: 3,  // Wait for up to 3 responses
+    timeout: 5000      // 5 second timeout
+  }
+)
+
+// Batch requests
+const results = await bus.requestBatch([
+  ['get:user', { id: '1' }],
+  ['get:posts', { userId: '1' }],
+  ['get:comments', { userId: '1' }]
+])
+
+// Request with custom options
+const user = await bus.request('get:user', { id: '123' }, {
+  timeout: 10000,     // Custom timeout
+  cache: false,       // Skip cache
+  retries: 3          // Retry on failure
+})
 ```
 
 ### Namespacing
@@ -249,6 +459,54 @@ cartNamespace.emit('updated', { items: [] })   // Emits 'cart:updated'
 // But you can listen to them from the global bus
 globalBus.on('user:login', handler)
 globalBus.on('cart:updated', handler)
+```
+
+### Error Handling
+
+Connectic provides comprehensive error handling with detailed error information:
+
+```typescript
+import { BusError, BusErrorCode, BusErrorFactory, isBusError, hasBusErrorCode } from 'connectic'
+
+try {
+  await bus.request('nonexistent:service', {})
+} catch (error) {
+  if (isBusError(error)) {
+    console.log('Bus error:', error.message)
+    console.log('Error code:', error.code)
+    console.log('Context:', error.context)
+    
+    // Check specific error types
+    if (hasBusErrorCode(error, BusErrorCode.TIMEOUT)) {
+      console.log('Request timed out')
+    }
+  }
+}
+
+// Create custom errors
+throw BusErrorFactory.timeout('my:request', 5000)
+throw BusErrorFactory.notFound('user:123')
+throw BusErrorFactory.unauthorized('admin:action')
+throw BusErrorFactory.badRequest('invalid:payload', 'Missing required field')
+```
+
+### Advanced Utilities
+
+```typescript
+// Listener management
+bus.hasListeners('user:login')           // Check if event has listeners
+bus.getListenerCount('user:login')       // Get number of listeners
+bus.removeAllListeners('user:login')     // Remove all listeners for event
+bus.removeAllListeners()                 // Remove ALL listeners
+
+// State management
+bus.removeState('user')                  // Remove shared state
+bus.getState('user')                     // Get current state value
+
+// Bus lifecycle
+bus.isDestroyedState()                   // Check if bus is destroyed
+bus.getDetailedInfo()                    // Get comprehensive bus information
+bus.destroy()                            // Clean up and destroy bus
 ```
 
 ## 📖 API Reference
@@ -281,9 +539,12 @@ interface MFEBus<TEventMap, TRequestMap> {
   on<K extends keyof TEventMap>(event: K, handler: (payload: TEventMap[K]) => void): () => void
   once<K extends keyof TEventMap>(event: K, handler: (payload: TEventMap[K]) => void): () => void
   off<K extends keyof TEventMap>(event: K, handler: Function): void
+  removeAllListeners<K extends keyof TEventMap>(event?: K): void
   
-  // Request/Response
+  // Request/Response  
   request<K extends keyof TRequestMap>(event: K, payload?, options?): Promise<Response>
+  requestMany<K extends keyof TRequestMap>(event: K, payload?, options?): Promise<Response[]>
+  requestBatch(requests: BatchRequest[]): Promise<any[]>
   respond<K extends keyof TRequestMap>(event: K): ResponderBuilder<K>
   
   // State Management
@@ -291,18 +552,89 @@ interface MFEBus<TEventMap, TRequestMap> {
   createComputed<T>(computeFn: () => T): ComputedState<T>
   setState<K extends keyof TEventMap>(key: K, value: TEventMap[K]): void
   getState<K extends keyof TEventMap>(key: K): TEventMap[K] | undefined
+  removeState<K extends keyof TEventMap>(key: K): void
   
   // Advanced Features
   use(plugin: BusPlugin): this
   namespace(name: string): MFEBus<TEventMap, TRequestMap>
-  cache: CacheManager
+  addHook(type: HookType, handler: HookHandler): void
+  removeHook(type: HookType, handler: HookHandler): void
+  
+  // Interceptors
   interceptRequest(interceptor: RequestInterceptor): void
   interceptResponse(interceptor: ResponseInterceptor): void
   
+  // Cache Management
+  cache: {
+    get(key: string): any
+    set(key: string, value: any, ttl?: number): void
+    invalidate(key: string): boolean
+    invalidatePattern(pattern: string): number
+    clear(): void
+  }
+  
   // Utilities
+  hasListeners<K extends keyof TEventMap>(event: K): boolean
+  getListenerCount<K extends keyof TEventMap>(event: K): number
   getStats(): BusStats
+  getDetailedInfo(): object
+  isDestroyedState(): boolean
   destroy(): void
 }
+```
+
+### Factory & Registry Functions
+
+```typescript
+// Core factory functions
+createBus<Events, Requests>(config: BusConfig): MFEBus<Events, Requests>
+getBus<Events, Requests>(name: string): MFEBus<Events, Requests> | null
+getOrCreateBus<Events, Requests>(config: BusConfig): MFEBus<Events, Requests>
+
+// Registry management
+removeBus(name: string): boolean
+clearAllBuses(): void
+listBuses(): string[]
+getAllBusStats(): Record<string, BusStats>
+getRegistryInfo(): object
+cleanup(): void
+```
+
+### Built-in Exports
+
+```typescript
+// Built-in plugins
+import { Plugins } from 'connectic'
+Plugins.Logger        // Comprehensive logging plugin
+Plugins.Validator     // Schema validation plugin  
+Plugins.RateLimit     // Request rate limiting plugin
+
+// Utility classes
+import { 
+  BuiltinMiddleware,    // Pre-built middleware functions
+  BuiltinInterceptors,  // Pre-built interceptor functions
+  InterceptorUtils,     // Interceptor helper utilities
+  SharedStateUtils,     // State management utilities
+  ComputedStateUtils,   // Computed state utilities
+  CacheUtils,           // Cache management utilities
+  RequestResponseUtils  // Request/response utilities
+} from 'connectic'
+
+// Error handling
+import {
+  BusError,             // Custom error class
+  BusErrorCode,         // Error code constants
+  BusErrorFactory,      // Error creation utilities
+  isBusError,           // Error type checking
+  hasBusErrorCode,      // Error code checking
+  wrapError            // Error wrapping utility
+} from 'connectic'
+
+// Library metadata
+import { VERSION, META } from 'connectic'
+console.log(META.version)    // "1.0.0"
+console.log(META.name)       // "connectic"
+```
 ```
 
 ## 📦 Framework Integration
@@ -373,11 +705,35 @@ interface BusConfig {
   cache?: {
     defaultTtl?: number          // Default cache TTL in ms
     maxSize?: number             // Maximum cache entries
+    strategy?: CacheStrategy     // Cache eviction strategy
   }
   maxListeners?: number          // Max listeners per event (default: 100)
   namespace?: string             // Default namespace
-  requestTimeout?: number        // Default request timeout in ms
+  requestTimeout?: number        // Default request timeout in ms (default: 5000)
+  retryOptions?: {
+    maxRetries?: number          // Maximum retry attempts
+    retryDelay?: number          // Delay between retries in ms
+    backoffFactor?: number       // Exponential backoff multiplier
+  }
 }
+
+// Advanced configuration examples
+const bus = createBus({
+  name: 'production-app',
+  debug: process.env.NODE_ENV === 'development',
+  cache: {
+    defaultTtl: 300000,          // 5 minutes
+    maxSize: 10000,              // 10k entries
+    strategy: 'LRU'              // Least Recently Used eviction
+  },
+  requestTimeout: 10000,         // 10 second timeout
+  maxListeners: 500,             // High listener limit
+  retryOptions: {
+    maxRetries: 3,
+    retryDelay: 1000,
+    backoffFactor: 2
+  }
+})
 ```
 
 ## 🚀 Real-World Examples
@@ -430,7 +786,7 @@ dashboard.on('metrics:updated', ({ metric, data }) => {
 ## 🧪 Testing
 
 ```typescript
-import { createBus, clearAllBuses } from 'connectic'
+import { createBus, clearAllBuses, BusError, isBusError } from 'connectic'
 
 describe('My Application', () => {
   let bus: MFEBus
@@ -456,7 +812,64 @@ describe('My Application', () => {
     
     expect(loginSpy).toHaveBeenCalledWith(mockUser)
   })
-})
+  
+  it('should handle errors properly', async () => {
+    bus.respond('failing:service').handler(() => {
+      throw new Error('Service failed')
+    })
+    
+    try {
+      await bus.request('failing:service')
+    } catch (error) {
+      expect(isBusError(error)).toBe(true)
+      expect(error.message).toContain('Service failed')
+    }
+  })
+  
+  it('should validate listener counts', () => {
+    const handler = () => {}
+    bus.on('test:event', handler)
+    
+    expect(bus.hasListeners('test:event')).toBe(true)
+    expect(bus.getListenerCount('test:event')).toBe(1)
+    
+    bus.off('test:event', handler)
+    expect(bus.hasListeners('test:event')).toBe(false)
+  })
+  
+  it('should handle batch requests', async () => {
+    bus.respond('get:user').handler(async ({ id }) => ({ id, name: `User ${id}` }))
+    bus.respond('get:posts').handler(async ({ userId }) => [{ id: 1, userId, title: 'Post 1' }])
+    
+    const results = await bus.requestBatch([
+      ['get:user', { id: '1' }],
+      ['get:posts', { userId: '1' }]
+    ])
+    
+    expect(results).toHaveLength(2)
+    expect(results[0]).toEqual({ id: '1', name: 'User 1' })
+    expect(results[1]).toHaveLength(1)
+  })
+  
+  it('should handle state management', () => {
+    const userState = bus.createState('user', null)
+    const values: any[] = []
+    
+    userState.subscribe((value) => values.push(value))
+    
+    userState.set({ id: '123', name: 'John' })
+    userState.set({ id: '456', name: 'Jane' })
+    
+    expect(values).toEqual([
+      null,
+      { id: '123', name: 'John' },
+      { id: '456', name: 'Jane' }
+    ])
+    
+    bus.removeState('user')
+    expect(bus.getState('user')).toBeUndefined()
+  })
+}
 ```
 
 ## 📊 Performance & Memory Management
@@ -475,14 +888,29 @@ describe('My Application', () => {
 // Get detailed statistics
 const stats = bus.getStats()
 console.log(`Active listeners: ${stats.activeListeners}`)
+console.log(`Total events: ${stats.totalEvents}`)
+console.log(`Total requests: ${stats.totalRequests}`)
 console.log(`Memory usage: ${stats.memoryUsage} bytes`)
 console.log(`Cache size: ${stats.cacheSize} entries`)
 
-// Detailed component information
+// Get comprehensive component information
 const details = bus.getDetailedInfo()
 console.log('Event bus:', details.eventBus)
 console.log('State manager:', details.stateManager)
 console.log('Cache manager:', details.cacheManager)
+console.log('Request manager:', details.requestManager)
+console.log('Interceptor manager:', details.interceptorManager)
+
+// Registry-wide statistics
+const allStats = getAllBusStats()
+console.log('All bus instances:', allStats)
+
+// Registry health information
+const registryInfo = getRegistryInfo()
+console.log('Registry status:', registryInfo)
+
+// Cleanup operations
+cleanup() // Performs maintenance on registry
 ```
 
 ## 🤝 Contributing
